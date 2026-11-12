@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Stancl\Tenancy\Database\Models\Tenant;
 
 class Family extends Tenant
@@ -22,5 +23,13 @@ class Family extends Tenant
     public static function getCustomColumns(): array
     {
         return ['id', 'name'];
+    }
+
+    /**
+     * Get the users that belong to this family.
+     */
+    public function users(): HasMany
+    {
+        return $this->hasMany(User::class);
     }
 }

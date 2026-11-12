@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
 class IdentifyFamily
@@ -20,7 +21,15 @@ class IdentifyFamily
         if (! $familyId || ! Str::isUuid($familyId)) {
             abort(400, 'Family ID is required.');
         }
-        
+
+        $user = $request->user();
+
+        if (! $user || $user->family_id !== $familyId) {
+            abort(403, 'You are not a member of this family.');
+        }
+
+        tenancy()->initialize($user->family);
+
         return $next($request);
     }
 }
