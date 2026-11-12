@@ -102,9 +102,9 @@ class TenancyServiceProvider extends ServiceProvider
     {
         InitializeTenancyByRequestData::$header = 'X-Family-Id';
         InitializeTenancyByRequestData::$queryParameter = null; // header only
-        
+
         $this->bootEvents();
-        $this->mapRoutes();
+        // $this->mapRoutes();
 
         $this->makeTenancyMiddlewareHighestPriority();
     }
@@ -143,6 +143,7 @@ class TenancyServiceProvider extends ServiceProvider
             Middleware\InitializeTenancyByDomainOrSubdomain::class,
             Middleware\InitializeTenancyByPath::class,
             Middleware\InitializeTenancyByRequestData::class,
+            \App\Http\Middleware\IdentifyFamily::class,
         ];
 
         foreach (array_reverse($tenancyMiddleware) as $middleware) {
