@@ -1,0 +1,26 @@
+<?php
+
+namespace App\Models;
+
+use Stancl\Tenancy\Database\Models\Tenant;
+
+class Family extends Tenant
+{
+    /**
+     * The table associated with the model.
+     *
+     * @var string
+     */
+    protected $table = 'families';
+
+    /**
+     * Columns stored as real database columns.
+     * Any other attribute is saved in the package's JSON `data` column.
+     *
+     * @return array<int, string>
+     */
+    public static function getCustomColumns(): array
+    {
+        return ['id', 'name'];
+    }
+}
