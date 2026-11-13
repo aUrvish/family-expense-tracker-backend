@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\TransactionController;
+use App\Http\Middleware\IdentifyFamily;
 use Illuminate\Support\Facades\Route;
 
 Route::controller(AuthController::class)
@@ -17,4 +19,8 @@ Route::controller(AuthController::class)
         });
     });
 
-Route::get('/categories', [CategoryController::class, 'index'])->name('categories.index');
+Route::get('/categories', [CategoryController::class, 'index'])->middleware('auth:sanctum')->name('categories.index');
+
+Route::middleware(['auth:sanctum', IdentifyFamily::class])->group(function () {
+    Route::post('/transaction/save', [TransactionController::class, 'save'])->name('transactions.save');
+});
