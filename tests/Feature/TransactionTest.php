@@ -616,4 +616,468 @@ class TransactionTest extends TestCase
         $this->assertTrue(Transaction::visibleTo($bob)->pluck('id')->contains($bobPersonalTx->id));
         $this->assertFalse(Transaction::visibleTo($bob)->pluck('id')->contains($alicePersonalTx->id));
     }
+
+    public function test_unauthenticated_user_cannot_access_index_show_or_delete(): void
+    {
+        $this->getJson('/api/transactions')->assertStatus(401);
+        $this->getJson('/api/transaction/1')->assertStatus(401);
+        $this->deleteJson('/api/transaction/1')->assertStatus(401);
+    }
+
+    public function test_user_can_list_transactions_scoped_to_family_and_visibility(): void
+    {
+        $familyA = Family::create(['name' => 'Family A']);
+        $familyB = Family::create(['name' => 'Family B']);
+
+        $alice = User::create([
+            'family_id' => $familyA->id,
+            'name' => 'Alice',
+            'email' => 'alice@example.com',
+            'password' => 'secret123',
+        ]);
+        $aliceToken = $alice->createToken('auth_token')->plainTextToken;
+
+        $bob = User::create([
+            'family_id' => $familyA->id,
+            'name' => 'Bob',
+            'email' => 'bob@example.com',
+            'password' => 'secret123',
+        ]);
+
+        $category = Category::create([
+            'name' => 'Food',
+            'slug' => 'food',
+            'icon' => 'utensils',
+            'color' => '#F97316',
+        ]);
+
+        // 1. Shared transaction in Family A
+        $sharedTx = Transaction::create([
+            'family_id' => $familyA->id,
+            'user_id' => $bob->id,
+            'category_id' => $category->id,
+            'type' => 'expense',
+            'amount' => 100.00,
+            'date' => '2026-11-10',
+            'visibility' => 'shared',
+            'note' => 'Family dinner',
+        ]);
+
+        // 2. Alice's personal transaction in Family A
+        $alicePersonalTx = Transaction::create([
+            'family_id' => $familyA->id,
+            'user_id' => $alice->id,
+            'category_id' => $category->id,
+            'type' => 'expense',
+            'amount' => 50.00,
+            'date' => '2026-11-11',
+            'visibility' => 'personal',
+            'note' => 'Alice lunch',
+        ]);
+
+        // 3. Bob's personal transaction in Family A (should NOT be visible to Alice)
+        Transaction::create([
+            'family_id' => $familyA->id,
+            'user_id' => $bob->id,
+            'category_id' => $category->id,
+            'type' => 'expense',
+            'amount' => 75.00,
+            'date' => '2026-11-12',
+            'visibility' => 'personal',
+            'note' => 'Bob coffee',
+        ]);
+
+        // 4. Family B transaction (should NOT be visible to Alice)
+        Transaction::create([
+            'family_id' => $familyB->id,
+            'user_id' => $alice->id,
+            'category_id' => $category->id,
+            'type' => 'expense',
+            'amount' => 999.00,
+            'date' => '2026-11-13',
+            'visibility' => 'shared',
+            'note' => 'Family B item',
+        ]);
+
+        $response = $this->withToken($aliceToken)
+            ->withHeader('X-Family-Id', $familyA->id)
+            ->getJson('/api/transactions');
+
+        $response->assertStatus(200)
+            ->assertJsonPath('status', true)
+            ->assertJsonPath('message', 'Transactions retrieved successfully.')
+            ->assertJsonPath('data.total', 2);
+
+        $data = $response->json('data.data');
+        $this->assertCount(2, $data);
+
+        $returnedIds = collect($data)->pluck('id');
+        $this->assertTrue($returnedIds->contains($sharedTx->id));
+        $this->assertTrue($returnedIds->contains($alicePersonalTx->id));
+    }
+
+    public function test_user_can_filter_transactions_by_type_category_visibility_and_search(): void
+    {
+        $family = Family::create(['name' => 'Family A']);
+        $user = User::create([
+            'family_id' => $family->id,
+            'name' => 'Alice',
+            'email' => 'alice@example.com',
+            'password' => 'secret123',
+        ]);
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        $foodCategory = Category::create([
+            'name' => 'Food',
+            'slug' => 'food',
+            'icon' => 'utensils',
+            'color' => '#F97316',
+        ]);
+
+        $salaryCategory = Category::create([
+            'name' => 'Salary',
+            'slug' => 'salary',
+            'icon' => 'cash',
+            'color' => '#10B981',
+        ]);
+
+        Transaction::create([
+            'family_id' => $family->id,
+            'user_id' => $user->id,
+            'category_id' => $foodCategory->id,
+            'type' => 'expense',
+            'amount' => 200.00,
+            'date' => '2026-11-01',
+            'visibility' => 'shared',
+            'note' => 'Supermarket shopping',
+        ]);
+
+        Transaction::create([
+            'family_id' => $family->id,
+            'user_id' => $user->id,
+            'category_id' => $salaryCategory->id,
+            'type' => 'income',
+            'amount' => 50000.00,
+            'date' => '2026-11-05',
+            'visibility' => 'personal',
+            'note' => 'Monthly tech salary',
+        ]);
+
+        // Filter by type=income
+        $incomeResponse = $this->withToken($token)
+            ->withHeader('X-Family-Id', $family->id)
+            ->getJson('/api/transactions?type=income');
+        $incomeResponse->assertStatus(200)
+            ->assertJsonPath('data.total', 1)
+            ->assertJsonPath('data.data.0.type', 'income');
+
+        // Filter by type=expense (or expence / expenses)
+        $expenseResponse = $this->withToken($token)
+            ->withHeader('X-Family-Id', $family->id)
+            ->getJson('/api/transactions?type=expense');
+        $expenseResponse->assertStatus(200)
+            ->assertJsonPath('data.total', 1)
+            ->assertJsonPath('data.data.0.type', 'expense');
+
+        // Filter by category_id
+        $categoryResponse = $this->withToken($token)
+            ->withHeader('X-Family-Id', $family->id)
+            ->getJson('/api/transactions?category_id='.$foodCategory->id);
+        $categoryResponse->assertStatus(200)
+            ->assertJsonPath('data.total', 1)
+            ->assertJsonPath('data.data.0.category_id', $foodCategory->id);
+
+        // Filter by visibility=personal
+        $visibilityResponse = $this->withToken($token)
+            ->withHeader('X-Family-Id', $family->id)
+            ->getJson('/api/transactions?visibility=personal');
+        $visibilityResponse->assertStatus(200)
+            ->assertJsonPath('data.total', 1)
+            ->assertJsonPath('data.data.0.visibility', 'personal');
+
+        // Filter by search
+        $searchResponse = $this->withToken($token)
+            ->withHeader('X-Family-Id', $family->id)
+            ->getJson('/api/transactions?search=Supermarket');
+        $searchResponse->assertStatus(200)
+            ->assertJsonPath('data.total', 1)
+            ->assertJsonPath('data.data.0.note', 'Supermarket shopping');
+
+        // Filter by date range
+        $dateResponse = $this->withToken($token)
+            ->withHeader('X-Family-Id', $family->id)
+            ->getJson('/api/transactions?start_date=2026-11-02&end_date=2026-11-06');
+        $dateResponse->assertStatus(200)
+            ->assertJsonPath('data.total', 1)
+            ->assertJsonPath('data.data.0.date', '2026-11-05');
+    }
+
+    public function test_user_can_view_single_transaction(): void
+    {
+        $family = Family::create(['name' => 'Family A']);
+        $user = User::create([
+            'family_id' => $family->id,
+            'name' => 'Alice',
+            'email' => 'alice@example.com',
+            'password' => 'secret123',
+        ]);
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        $category = Category::create([
+            'name' => 'Rent',
+            'slug' => 'rent',
+            'icon' => 'home',
+            'color' => '#3B82F6',
+        ]);
+
+        $transaction = Transaction::create([
+            'family_id' => $family->id,
+            'user_id' => $user->id,
+            'category_id' => $category->id,
+            'type' => 'expense',
+            'amount' => 15000.00,
+            'date' => '2026-11-01',
+            'visibility' => 'shared',
+            'note' => 'Apartment monthly rent',
+        ]);
+
+        $response = $this->withToken($token)
+            ->withHeader('X-Family-Id', $family->id)
+            ->getJson('/api/transaction/'.$transaction->id);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('status', true)
+            ->assertJsonPath('data.id', $transaction->id)
+            ->assertJsonPath('data.amount', '15000.00')
+            ->assertJsonPath('data.category.slug', 'rent')
+            ->assertJsonPath('data.user.email', 'alice@example.com');
+    }
+
+    public function test_user_cannot_view_personal_transaction_of_another_member(): void
+    {
+        $family = Family::create(['name' => 'Family A']);
+
+        $alice = User::create([
+            'family_id' => $family->id,
+            'name' => 'Alice',
+            'email' => 'alice@example.com',
+            'password' => 'secret123',
+        ]);
+        $aliceToken = $alice->createToken('auth_token')->plainTextToken;
+
+        $bob = User::create([
+            'family_id' => $family->id,
+            'name' => 'Bob',
+            'email' => 'bob@example.com',
+            'password' => 'secret123',
+        ]);
+
+        $category = Category::create([
+            'name' => 'Shopping',
+            'slug' => 'shopping',
+            'icon' => 'bag',
+            'color' => '#8B5CF6',
+        ]);
+
+        $bobPersonalTx = Transaction::create([
+            'family_id' => $family->id,
+            'user_id' => $bob->id,
+            'category_id' => $category->id,
+            'type' => 'expense',
+            'amount' => 99.00,
+            'date' => '2026-11-13',
+            'visibility' => 'personal',
+        ]);
+
+        // Alice tries to view Bob's personal transaction
+        $response = $this->withToken($aliceToken)
+            ->withHeader('X-Family-Id', $family->id)
+            ->getJson('/api/transaction/'.$bobPersonalTx->id);
+
+        $response->assertStatus(404)
+            ->assertJsonPath('status', false)
+            ->assertJsonPath('message', 'Transaction not found.');
+    }
+
+    public function test_user_can_delete_own_personal_transaction(): void
+    {
+        $family = Family::create(['name' => 'Family A']);
+        $user = User::create([
+            'family_id' => $family->id,
+            'name' => 'Alice',
+            'email' => 'alice@example.com',
+            'password' => 'secret123',
+        ]);
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        $category = Category::create([
+            'name' => 'Shopping',
+            'slug' => 'shopping',
+            'icon' => 'bag',
+            'color' => '#8B5CF6',
+        ]);
+
+        $transaction = Transaction::create([
+            'family_id' => $family->id,
+            'user_id' => $user->id,
+            'category_id' => $category->id,
+            'type' => 'expense',
+            'amount' => 120.00,
+            'date' => '2026-11-13',
+            'visibility' => 'personal',
+        ]);
+
+        $response = $this->withToken($token)
+            ->withHeader('X-Family-Id', $family->id)
+            ->deleteJson('/api/transaction/'.$transaction->id);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('status', true)
+            ->assertJsonPath('message', 'Expense deleted successfully.');
+
+        $this->assertDatabaseMissing('transactions', [
+            'id' => $transaction->id,
+        ]);
+    }
+
+    public function test_user_cannot_delete_personal_transaction_of_another_member(): void
+    {
+        $family = Family::create(['name' => 'Family A']);
+
+        $alice = User::create([
+            'family_id' => $family->id,
+            'name' => 'Alice',
+            'email' => 'alice@example.com',
+            'password' => 'secret123',
+        ]);
+        $aliceToken = $alice->createToken('auth_token')->plainTextToken;
+
+        $bob = User::create([
+            'family_id' => $family->id,
+            'name' => 'Bob',
+            'email' => 'bob@example.com',
+            'password' => 'secret123',
+        ]);
+
+        $category = Category::create([
+            'name' => 'Shopping',
+            'slug' => 'shopping',
+            'icon' => 'bag',
+            'color' => '#8B5CF6',
+        ]);
+
+        $bobPersonalTx = Transaction::create([
+            'family_id' => $family->id,
+            'user_id' => $bob->id,
+            'category_id' => $category->id,
+            'type' => 'expense',
+            'amount' => 200.00,
+            'date' => '2026-11-13',
+            'visibility' => 'personal',
+        ]);
+
+        $response = $this->withToken($aliceToken)
+            ->withHeader('X-Family-Id', $family->id)
+            ->deleteJson('/api/transaction/'.$bobPersonalTx->id);
+
+        $response->assertStatus(404)
+            ->assertJsonPath('status', false)
+            ->assertJsonPath('message', 'Transaction not found.');
+
+        $this->assertDatabaseHas('transactions', [
+            'id' => $bobPersonalTx->id,
+        ]);
+    }
+
+    public function test_any_family_member_can_delete_shared_transaction(): void
+    {
+        $family = Family::create(['name' => 'Family A']);
+
+        $alice = User::create([
+            'family_id' => $family->id,
+            'name' => 'Alice',
+            'email' => 'alice@example.com',
+            'password' => 'secret123',
+        ]);
+        $aliceToken = $alice->createToken('auth_token')->plainTextToken;
+
+        $bob = User::create([
+            'family_id' => $family->id,
+            'name' => 'Bob',
+            'email' => 'bob@example.com',
+            'password' => 'secret123',
+        ]);
+
+        $category = Category::create([
+            'name' => 'Groceries',
+            'slug' => 'groceries',
+            'icon' => 'cart',
+            'color' => '#10B981',
+        ]);
+
+        // Bob created a shared transaction
+        $sharedTx = Transaction::create([
+            'family_id' => $family->id,
+            'user_id' => $bob->id,
+            'category_id' => $category->id,
+            'type' => 'expense',
+            'amount' => 450.00,
+            'date' => '2026-11-13',
+            'visibility' => 'shared',
+        ]);
+
+        // Alice deletes Bob's shared transaction
+        $response = $this->withToken($aliceToken)
+            ->withHeader('X-Family-Id', $family->id)
+            ->deleteJson('/api/transaction/'.$sharedTx->id);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('status', true)
+            ->assertJsonPath('message', 'Expense deleted successfully.');
+
+        $this->assertDatabaseMissing('transactions', [
+            'id' => $sharedTx->id,
+        ]);
+    }
+
+    public function test_cannot_delete_or_view_transaction_from_another_family(): void
+    {
+        $familyA = Family::create(['name' => 'Family A']);
+        $familyB = Family::create(['name' => 'Family B']);
+
+        $alice = User::create([
+            'family_id' => $familyA->id,
+            'name' => 'Alice',
+            'email' => 'alice@example.com',
+            'password' => 'secret123',
+        ]);
+        $aliceToken = $alice->createToken('auth_token')->plainTextToken;
+
+        $category = Category::create([
+            'name' => 'Groceries',
+            'slug' => 'groceries',
+            'icon' => 'cart',
+            'color' => '#10B981',
+        ]);
+
+        $familyBTx = Transaction::create([
+            'family_id' => $familyB->id,
+            'user_id' => $alice->id,
+            'category_id' => $category->id,
+            'type' => 'expense',
+            'amount' => 100.00,
+            'date' => '2026-11-13',
+            'visibility' => 'shared',
+        ]);
+
+        $this->withToken($aliceToken)
+            ->withHeader('X-Family-Id', $familyA->id)
+            ->getJson('/api/transaction/'.$familyBTx->id)
+            ->assertStatus(404);
+
+        $this->withToken($aliceToken)
+            ->withHeader('X-Family-Id', $familyA->id)
+            ->deleteJson('/api/transaction/'.$familyBTx->id)
+            ->assertStatus(404);
+    }
 }

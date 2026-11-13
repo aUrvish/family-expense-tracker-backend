@@ -22,5 +22,8 @@ Route::controller(AuthController::class)
 Route::get('/categories', [CategoryController::class, 'index'])->middleware('auth:sanctum')->name('categories.index');
 
 Route::middleware(['auth:sanctum', IdentifyFamily::class])->group(function () {
+    Route::get('/transactions', [TransactionController::class, 'index'])->name('transactions.index');
     Route::post('/transaction/save', [TransactionController::class, 'save'])->name('transactions.save');
+    Route::get('/transaction/{id}', [TransactionController::class, 'show'])->name('transactions.show');
+    Route::delete('/transaction/{id}', [TransactionController::class, 'destroy'])->name('transactions.destroy');
 });

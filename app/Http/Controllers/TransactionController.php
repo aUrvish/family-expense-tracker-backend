@@ -13,6 +13,80 @@ use Throwable;
 class TransactionController extends Controller
 {
     /**
+     * Display a listing of transactions.
+     */
+    public function index(Request $request): JsonResponse
+    {
+        try {
+            $familyId = tenant('id');
+
+            if (! $familyId) {
+                return $this->errorResponse('Family context is required.', 400);
+            }
+
+            $user = $request->user();
+
+            $query = Transaction::query()
+                ->where('family_id', $familyId)
+                ->visibleTo($user)
+                ->with(['category', 'user']);
+
+            // Filter by type ('expense' or 'income')
+            if ($request->filled('type') && in_array($request->input('type'), ['expense', 'income'])) {
+                $query->where('type', $request->input('type'));
+            }
+
+            // Filter by user_id (family member)
+            if ($request->filled('user_id')) {
+                $query->where('user_id', $request->input('user_id'));
+            }
+
+            // Filter by category_id
+            if ($request->filled('category_id')) {
+                $query->where('category_id', $request->input('category_id'));
+            }
+
+            // Filter by visibility ('shared' or 'personal')
+            if ($request->filled('visibility') && in_array($request->input('visibility'), ['shared', 'personal'])) {
+                $query->where('visibility', $request->input('visibility'));
+            }
+
+            // Filter by date range
+            if ($request->filled('start_date')) {
+                $query->whereDate('date', '>=', $request->input('start_date'));
+            }
+
+            if ($request->filled('end_date')) {
+                $query->whereDate('date', '<=', $request->input('end_date'));
+            }
+
+            // Filter by month and year
+            if ($request->filled('month')) {
+                $query->whereMonth('date', $request->input('month'));
+            }
+
+            if ($request->filled('year')) {
+                $query->whereYear('date', $request->input('year'));
+            }
+
+            // Search in note
+            if ($request->filled('search')) {
+                $query->where('note', 'like', '%'.$request->input('search').'%');
+            }
+
+            $query->orderByDesc('date')->orderByDesc('id');
+
+            $transactions = $query->paginate($request->integer('per_page', 15));
+
+            return $this->successResponse($transactions, 'Transactions retrieved successfully.');
+        } catch (Throwable $e) {
+            Log::error('Fetch transactions failed: '.$e->getMessage());
+
+            return $this->errorResponse();
+        }
+    }
+
+    /**
      * Create or update a transaction (expense or income).
      */
     public function save(Request $request): JsonResponse
@@ -91,6 +165,73 @@ class TransactionController extends Controller
             );
         } catch (Throwable $e) {
             Log::error('Save transaction failed: '.$e->getMessage());
+
+            return $this->errorResponse();
+        }
+    }
+
+    /**
+     * Display the specified transaction.
+     */
+    public function show(Request $request, int|string $id): JsonResponse
+    {
+        try {
+            $familyId = tenant('id');
+
+            if (! $familyId) {
+                return $this->errorResponse('Family context is required.', 400);
+            }
+
+            $user = $request->user();
+
+            $transaction = Transaction::where('family_id', $familyId)
+                ->visibleTo($user)
+                ->with(['category', 'user'])
+                ->find($id);
+
+            if (! $transaction) {
+                return $this->errorResponse('Transaction not found.', 404);
+            }
+
+            return $this->successResponse($transaction, 'Transaction retrieved successfully.');
+        } catch (Throwable $e) {
+            Log::error('Show transaction failed: '.$e->getMessage());
+
+            return $this->errorResponse();
+        }
+    }
+
+    /**
+     * Remove the specified transaction from storage.
+     */
+    public function destroy(Request $request, int|string $id): JsonResponse
+    {
+        try {
+            $familyId = tenant('id');
+
+            if (! $familyId) {
+                return $this->errorResponse('Family context is required.', 400);
+            }
+
+            $user = $request->user();
+
+            $transaction = Transaction::where('family_id', $familyId)->find($id);
+
+            if (! $transaction) {
+                return $this->errorResponse('Transaction not found.', 404);
+            }
+
+            // Personal transactions can only be deleted by their creator
+            if ($transaction->visibility === 'personal' && $transaction->user_id !== $user->id) {
+                return $this->errorResponse('Transaction not found.', 404);
+            }
+
+            $type = ucfirst($transaction->type);
+            $transaction->delete();
+
+            return $this->successResponse(null, $type.' deleted successfully.');
+        } catch (Throwable $e) {
+            Log::error('Delete transaction failed: '.$e->getMessage());
 
             return $this->errorResponse();
         }
