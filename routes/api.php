@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\CategoryController;
 use Illuminate\Support\Facades\Route;
 
 Route::controller(AuthController::class)
@@ -15,3 +16,5 @@ Route::controller(AuthController::class)
             Route::get('/user', 'user')->name('user');
         });
     });
+
+Route::get('/categories', [CategoryController::class, 'index'])->name('categories.index');
