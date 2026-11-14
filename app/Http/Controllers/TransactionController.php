@@ -78,7 +78,7 @@ class TransactionController extends Controller
 
             $transactions = $query->paginate($request->integer('per_page', 15));
 
-            return $this->successResponse($transactions, 'Transactions retrieved successfully.');
+            return $this->successResponse($transactions, 'Transactions retrieved successfully.'); /* */
         } catch (Throwable $e) {
             Log::error('Fetch transactions failed: '.$e->getMessage());
 
