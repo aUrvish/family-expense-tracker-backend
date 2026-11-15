@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DebtController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Middleware\IdentifyFamily;
@@ -45,4 +46,6 @@ Route::middleware(['auth:sanctum', IdentifyFamily::class])->group(function () {
             Route::delete('/{id}', 'destroy')->name('debts.destroy');
         });
     });
+
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 });
