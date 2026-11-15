@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DebtController;
+use App\Http\Controllers\FamilyController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Middleware\IdentifyFamily;
 use Illuminate\Support\Facades\Route;
@@ -48,4 +49,6 @@ Route::middleware(['auth:sanctum', IdentifyFamily::class])->group(function () {
     });
 
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/family/members', [FamilyController::class, 'members'])->name('family.members');
+    Route::get('/family/members/{id}', [FamilyController::class, 'show'])->name('family.members.show');
 });
