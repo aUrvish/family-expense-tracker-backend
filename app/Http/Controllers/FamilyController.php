@@ -29,7 +29,7 @@ class FamilyController extends Controller
                         'id' => $member->id,
                         'name' => $member->name,
                         'email' => $member->email,
-                        'joined_at' => $member->created_at?->toDateString(),
+                        'joined_at' => $member->created_at,
                     ];
                 });
 
@@ -63,7 +63,7 @@ class FamilyController extends Controller
                 'id' => $member->id,
                 'name' => $member->name,
                 'email' => $member->email,
-                'joined_at' => $member->created_at?->toDateString(),
+                'joined_at' => $member->created_at,
             ];
 
             return $this->successResponse($data, 'Family member profile retrieved successfully.');

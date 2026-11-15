@@ -110,7 +110,7 @@ class DashboardController extends Controller
                         'title' => $tx->category?->name ?? 'Expense',
                         'note' => $tx->note,
                         'amount' => (float) $tx->amount,
-                        'date' => $tx->date->toDateString(),
+                        'date' => $tx->date,
                         'user_name' => $tx->user?->name,
                         'category' => $tx->category,
                     ];
@@ -135,7 +135,7 @@ class DashboardController extends Controller
                         'title' => $title,
                         'note' => $tx->note,
                         'amount' => (float) $tx->amount,
-                        'date' => $tx->date->toDateString(),
+                        'date' => $tx->date,
                         'category' => $tx->category,
                     ];
                 });

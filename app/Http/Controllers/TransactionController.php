@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Transaction;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -53,11 +54,11 @@ class TransactionController extends Controller
 
             // Filter by date range
             if ($request->filled('start_date')) {
-                $query->whereDate('date', '>=', $request->input('start_date'));
+                $query->whereDate('date', '>=', Carbon::parse($request->input('start_date'))->toDateString());
             }
 
             if ($request->filled('end_date')) {
-                $query->whereDate('date', '<=', $request->input('end_date'));
+                $query->whereDate('date', '<=', Carbon::parse($request->input('end_date'))->toDateString());
             }
 
             // Filter by month and year
@@ -97,7 +98,7 @@ class TransactionController extends Controller
                 'type' => ['required', 'string', Rule::in(['expense', 'income'])],
                 'amount' => ['required', 'numeric', 'gt:0'],
                 'category_id' => ['required', 'integer', 'exists:categories,id'],
-                'date' => ['nullable', 'date'],
+                'date' => ['nullable'],
                 'note' => ['nullable', 'string', 'max:255'],
                 'payment_method' => ['nullable', 'string', 'max:50'],
                 'visibility' => ['nullable', 'string', Rule::in(['shared', 'personal'])],
@@ -116,6 +117,10 @@ class TransactionController extends Controller
                 return $this->errorResponse('Family context is required.', 400);
             }
 
+            $date = $request->filled('date')
+                ? Carbon::parse($request->input('date'))->toDateString()
+                : now()->toDateString();
+
             // Update existing transaction if 'id' is provided
             if (! empty($validated['id'])) {
                 $transaction = Transaction::where('family_id', $familyId)->find($validated['id']);
@@ -132,7 +137,7 @@ class TransactionController extends Controller
                     'category_id' => $validated['category_id'],
                     'type' => $validated['type'],
                     'amount' => $validated['amount'],
-                    'date' => $validated['date'] ?? $transaction->date,
+                    'date' => $request->filled('date') ? $date : $transaction->date,
                     'note' => $validated['note'] ?? null,
                     'payment_method' => $validated['payment_method'] ?? null,
                     'visibility' => $validated['visibility'] ?? $transaction->visibility,
@@ -152,7 +157,7 @@ class TransactionController extends Controller
                 'category_id' => $validated['category_id'],
                 'type' => $validated['type'],
                 'amount' => $validated['amount'],
-                'date' => $validated['date'] ?? now()->toDateString(),
+                'date' => $date,
                 'note' => $validated['note'] ?? null,
                 'payment_method' => $validated['payment_method'] ?? null,
                 'visibility' => $validated['visibility'] ?? 'shared',

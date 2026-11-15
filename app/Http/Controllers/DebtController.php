@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Category;
 use App\Models\Debt;
 use App\Models\Transaction;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -60,16 +61,16 @@ class DebtController extends Controller
 
             // Filter by date range
             if ($request->filled('start_date')) {
-                $query->whereDate('date', '>=', $request->input('start_date'));
+                $query->whereDate('date', '>=', Carbon::parse($request->input('start_date'))->toDateString());
             }
 
             if ($request->filled('end_date')) {
-                $query->whereDate('date', '<=', $request->input('end_date'));
+                $query->whereDate('date', '<=', Carbon::parse($request->input('end_date'))->toDateString());
             }
 
             // Filter by due_date
             if ($request->filled('due_date')) {
-                $query->whereDate('due_date', $request->input('due_date'));
+                $query->whereDate('due_date', Carbon::parse($request->input('due_date'))->toDateString());
             }
 
             $query->orderByDesc('date')->orderByDesc('id');
@@ -95,8 +96,8 @@ class DebtController extends Controller
                 'person_name' => ['required', 'string', 'max:255'],
                 'type' => ['required', 'string', Rule::in(['lent', 'borrowed'])],
                 'amount' => ['required', 'numeric', 'gt:0'],
-                'date' => ['nullable', 'date'],
-                'due_date' => ['nullable', 'date'],
+                'date' => ['nullable'],
+                'due_date' => ['nullable'],
                 'note' => ['nullable', 'string', 'max:255'],
                 'visibility' => ['nullable', 'string', Rule::in(['shared', 'personal'])],
                 'status' => ['nullable', 'string', Rule::in(['pending', 'settled'])],
@@ -129,14 +130,20 @@ class DebtController extends Controller
                 ]);
             }
 
-            return DB::transaction(function () use ($debt, $validated, $familyId, $user) {
+            return DB::transaction(function () use ($debt, $validated, $familyId, $user, $request) {
                 $isNew = ! $debt->exists;
                 $type = $validated['type'];
                 $personName = $validated['person_name'];
                 $amount = $validated['amount'];
                 $note = $validated['note'] ?? null;
-                $date = $validated['date'] ?? ($debt->date ?? now()->toDateString());
-                $dueDate = array_key_exists('due_date', $validated) ? $validated['due_date'] : $debt->due_date;
+                $date = $request->filled('date')
+                    ? Carbon::parse($request->input('date'))->toDateString()
+                    : ($debt->exists ? $debt->date : now()->toDateString());
+
+                $dueDate = array_key_exists('due_date', $validated)
+                    ? ($request->filled('due_date') ? Carbon::parse($request->input('due_date'))->toDateString() : null)
+                    : ($debt->exists ? $debt->due_date : null);
+
                 $visibility = $validated['visibility'] ?? ($debt->visibility ?? 'shared');
                 $status = $validated['status'] ?? ($debt->status ?? 'pending');
                 $categoryId = $validated['category_id'] ?? Category::where('slug', 'others')->value('id');
@@ -289,20 +296,22 @@ class DebtController extends Controller
                     $settleTxNote .= ": {$debt->note}";
                 }
 
+                $settledAt = now();
+
                 $settlementTx = Transaction::create([
                     'family_id' => $familyId,
                     'user_id' => $user->id,
                     'category_id' => $categoryId,
                     'type' => $settleTxType,
                     'amount' => $debt->amount,
-                    'date' => now()->toDateString(),
+                    'date' => $settledAt->toDateString(),
                     'note' => $settleTxNote,
                     'visibility' => $debt->visibility,
                 ]);
 
                 $debt->update([
                     'status' => 'settled',
-                    'settled_at' => now(),
+                    'settled_at' => $settledAt,
                     'settlement_transaction_id' => $settlementTx->id,
                 ]);
 

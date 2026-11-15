@@ -6,6 +6,7 @@ use App\Models\Category;
 use App\Models\Family;
 use App\Models\Transaction;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -809,7 +810,7 @@ class TransactionTest extends TestCase
             ->getJson('/api/transactions?start_date=2026-11-02&end_date=2026-11-06');
         $dateResponse->assertStatus(200)
             ->assertJsonPath('data.total', 1)
-            ->assertJsonPath('data.data.0.date', '2026-11-05');
+            ->assertJsonPath('data.data.0.date', Carbon::parse('2026-11-05', 'UTC')->timestamp);
     }
 
     public function test_user_can_view_single_transaction(): void

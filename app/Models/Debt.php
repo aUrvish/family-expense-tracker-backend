@@ -36,9 +36,11 @@ class Debt extends Model
     {
         return [
             'amount' => 'decimal:2',
-            'date' => 'date:Y-m-d',
-            'due_date' => 'date:Y-m-d',
-            'settled_at' => 'datetime',
+            'date' => 'timestamp',
+            'due_date' => 'timestamp',
+            'settled_at' => 'timestamp',
+            'created_at' => 'timestamp',
+            'updated_at' => 'timestamp',
         ];
     }
 

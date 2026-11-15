@@ -6,6 +6,7 @@ use App\Models\Category;
 use App\Models\Family;
 use App\Models\Transaction;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -191,7 +192,8 @@ class DashboardTest extends TestCase
         // Verify Recent Household Transactions
         $recentHousehold = $response->json('data.household.recent_transactions');
         $this->assertNotEmpty($recentHousehold);
-        $this->assertEquals($today, $recentHousehold[0]['date']);
+        $this->assertIsInt($recentHousehold[0]['date']);
+        $this->assertEquals(Carbon::parse($today, 'UTC')->timestamp, $recentHousehold[0]['date']);
 
         // Verify Recent Personal Transactions
         $recentPersonal = $response->json('data.personal.recent_transactions');

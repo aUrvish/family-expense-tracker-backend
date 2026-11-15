@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Family;
 use App\Models\User;
+use Carbon\CarbonInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -139,7 +140,7 @@ class FamilyMemberTest extends TestCase
             ->assertJsonPath('data.id', $rakesh->id)
             ->assertJsonPath('data.name', 'Rakesh')
             ->assertJsonPath('data.email', 'rakesh@example.com')
-            ->assertJsonPath('data.joined_at', $rakesh->created_at->toDateString())
+            ->assertJsonPath('data.joined_at', $rakesh->created_at instanceof CarbonInterface ? $rakesh->created_at->timestamp : $rakesh->created_at)
             ->assertJsonMissingPath('data.avatar_initial')
             ->assertJsonMissingPath('data.is_current_user')
             ->assertJsonMissingPath('data.summary')

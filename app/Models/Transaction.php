@@ -32,7 +32,9 @@ class Transaction extends Model
     {
         return [
             'amount' => 'decimal:2',
-            'date' => 'date:Y-m-d',
+            'date' => 'timestamp',
+            'created_at' => 'timestamp',
+            'updated_at' => 'timestamp',
         ];
     }
 
