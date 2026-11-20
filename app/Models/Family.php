@@ -48,4 +48,12 @@ class Family extends Tenant
     {
         return $this->hasMany(Debt::class);
     }
+
+    /**
+     * Get the budgets for this family.
+     */
+    public function budgets(): HasMany
+    {
+        return $this->hasMany(Budget::class);
+    }
 }
