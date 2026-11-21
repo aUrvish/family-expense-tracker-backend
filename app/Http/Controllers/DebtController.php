@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Category;
 use App\Models\Debt;
 use App\Models\Transaction;
+use App\Services\CurrencyService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -76,6 +77,7 @@ class DebtController extends Controller
             $query->orderByDesc('date')->orderByDesc('id');
 
             $debts = $query->paginate($request->integer('per_page', 15));
+            $debts->through(fn ($debt) => $this->formatDebt($debt));
 
             return $this->successResponse($debts, 'Debts retrieved successfully.');
         } catch (Throwable $e) {
@@ -134,7 +136,7 @@ class DebtController extends Controller
                 $isNew = ! $debt->exists;
                 $type = $validated['type'];
                 $personName = $validated['person_name'];
-                $amount = $validated['amount'];
+                $rawAmount = (float) $validated['amount'];
                 $note = $validated['note'] ?? null;
                 $date = $request->filled('date')
                     ? Carbon::parse($request->input('date'))->toDateString()
@@ -148,6 +150,10 @@ class DebtController extends Controller
                 $status = $validated['status'] ?? ($debt->status ?? 'pending');
                 $categoryId = $validated['category_id'] ?? Category::where('slug', 'others')->value('id');
 
+                $currency = tenant('currency') ?: config('app.base_currency', 'USD');
+                $currencyService = app(CurrencyService::class);
+                $baseAmount = $currencyService->convertToBaseAmount($rawAmount, $currency, Carbon::parse($date));
+
                 // 1. Initial Transaction (Lent => expense, Borrowed => income)
                 $initialAction = $type === 'lent' ? 'Lent to' : 'Borrowed from';
                 $initialNote = $note ? "{$initialAction} {$personName}: {$note}" : "{$initialAction} {$personName}";
@@ -159,7 +165,7 @@ class DebtController extends Controller
                         'user_id' => $debt->user_id ?? $user->id,
                         'category_id' => $categoryId,
                         'type' => $type === 'lent' ? 'expense' : 'income',
-                        'amount' => $amount,
+                        'amount' => $baseAmount,
                         'date' => $date,
                         'note' => $initialNote,
                         'visibility' => $visibility,
@@ -173,6 +179,7 @@ class DebtController extends Controller
                 if ($status === 'settled') {
                     $settleAction = $type === 'lent' ? 'Received from' : 'Paid to';
                     $settleNote = $note ? "Settled: {$settleAction} {$personName}: {$note}" : "Settled: {$settleAction} {$personName}";
+                    $settledDate = $debt->settled_at?->toDateString() ?? now()->toDateString();
 
                     $settlementTx = Transaction::updateOrCreate(
                         ['id' => $debt->settlement_transaction_id],
@@ -181,8 +188,8 @@ class DebtController extends Controller
                             'user_id' => $debt->user_id ?? $user->id,
                             'category_id' => $categoryId,
                             'type' => $type === 'lent' ? 'income' : 'expense',
-                            'amount' => $amount,
-                            'date' => $debt->settled_at?->toDateString() ?? now()->toDateString(),
+                            'amount' => $baseAmount,
+                            'date' => $settledDate,
                             'note' => $settleNote,
                             'visibility' => $visibility,
                         ]
@@ -198,7 +205,7 @@ class DebtController extends Controller
                 $debt->fill([
                     'person_name' => $personName,
                     'type' => $type,
-                    'amount' => $amount,
+                    'amount' => $baseAmount,
                     'date' => $date,
                     'due_date' => $dueDate,
                     'note' => $note,
@@ -213,7 +220,7 @@ class DebtController extends Controller
                 $statusCode = $isNew ? 201 : 200;
 
                 return $this->successResponse(
-                    $debt->fresh(['user', 'transaction', 'settlementTransaction']),
+                    $this->formatDebt($debt->fresh(['user', 'transaction', 'settlementTransaction'])),
                     $message,
                     $statusCode
                 );
@@ -248,7 +255,7 @@ class DebtController extends Controller
                 return $this->errorResponse('Debt record not found.', 404);
             }
 
-            return $this->successResponse($debt, 'Debt record retrieved successfully.');
+            return $this->successResponse($this->formatDebt($debt), 'Debt record retrieved successfully.');
         } catch (Throwable $e) {
             Log::error('Show debt failed: '.$e->getMessage());
 
@@ -282,7 +289,7 @@ class DebtController extends Controller
 
             if ($debt->status === 'settled') {
                 return $this->successResponse(
-                    $debt->load(['user', 'transaction', 'settlementTransaction']),
+                    $this->formatDebt($debt->load(['user', 'transaction', 'settlementTransaction'])),
                     'Debt record is already settled.'
                 );
             }
@@ -316,7 +323,7 @@ class DebtController extends Controller
                 ]);
 
                 return $this->successResponse(
-                    $debt->fresh(['user', 'transaction', 'settlementTransaction']),
+                    $this->formatDebt($debt->fresh(['user', 'transaction', 'settlementTransaction'])),
                     'Debt settled successfully.'
                 );
             });
@@ -370,5 +377,36 @@ class DebtController extends Controller
 
             return $this->errorResponse();
         }
+    }
+
+    /**
+     * Format a debt model and its linked transactions with currency display metadata.
+     *
+     * @return array<string, mixed>
+     */
+    protected function formatDebt(Debt $debt): array
+    {
+        $currency = tenant('currency') ?: config('app.base_currency', 'USD');
+        $currencyService = app(CurrencyService::class);
+
+        // Helper to format any model amount and date into currency display metadata
+        $format = function ($amount, $date) use ($currencyService, $currency): array {
+            $cents = (int) round(((float) $amount) * 100);
+
+            return $currencyService->formatWithDisplay($cents, $currency, Carbon::parse($date ?? now()));
+        };
+
+        $data = $debt->toArray();
+        $data['display'] = $format($debt->amount, $debt->date);
+
+        if ($debt->relationLoaded('transaction') && $debt->transaction) {
+            $data['transaction']['display'] = $format($debt->transaction->amount, $debt->transaction->date);
+        }
+
+        if ($debt->relationLoaded('settlementTransaction') && $debt->settlementTransaction) {
+            $data['settlement_transaction']['display'] = $format($debt->settlementTransaction->amount, $debt->settlementTransaction->date);
+        }
+
+        return $data;
     }
 }

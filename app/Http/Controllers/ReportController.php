@@ -31,116 +31,110 @@ class ReportController extends Controller
             $scope = $request->input('scope', 'household');
             $isPersonal = $scope === 'personal';
 
-            $monthName = Carbon::createFromDate($year, $month, 1)->format('F');
-            $monthDate = Carbon::createFromDate($year, $month, 1)->endOfMonth();
-
             $currency = tenant('currency') ?: config('app.base_currency', 'USD');
             $currencyService = app(CurrencyService::class);
             $decimals = $currencyService->getCurrencyModel($currency)?->decimal_places ?? 2;
 
-            // Helper to convert base amount and format display for the given date
-            $formatSpend = function (float $amount, ?Carbon $date = null) use ($currencyService, $currency, $monthDate, $decimals): array {
-                $cents = (int) round($amount * 100);
-                $lookupDate = $date ?? $monthDate;
-                $convertedCents = $currencyService->convert($cents, $currency, $lookupDate);
-
-                return [
-                    'amount' => round($convertedCents / (10 ** $decimals), $decimals),
-                    'display' => $currencyService->formatWithDisplay($cents, $currency, $lookupDate),
-                ];
-            };
-
             // 1. Base query for active household / personal expenses
-            $baseQuery = Transaction::query()
-                ->where('transactions.family_id', $familyId)
-                ->where('transactions.type', 'expense');
+            $baseQuery = Transaction::where('family_id', $familyId)
+                ->where('type', 'expense');
 
             if ($isPersonal) {
-                $baseQuery->where('transactions.user_id', $user->id);
+                $baseQuery->where('user_id', $user->id);
             } else {
-                $baseQuery->where('transactions.visibility', 'shared');
+                $baseQuery->where('visibility', 'shared');
             }
 
-            // 2. Aggregate category spend (sum base amount, convert once at end)
-            $categoryRows = (clone $baseQuery)
-                ->whereYear('transactions.date', $year)
-                ->whereMonth('transactions.date', $month)
-                ->join('categories', 'transactions.category_id', '=', 'categories.id')
-                ->selectRaw('categories.id, categories.name, categories.slug, categories.color, SUM(transactions.amount) as amount')
-                ->groupBy('categories.id', 'categories.name', 'categories.slug', 'categories.color')
-                ->orderByDesc('amount')
+            // 2. Monthly transactions with categories
+            $transactions = (clone $baseQuery)
+                ->whereYear('date', $year)
+                ->whereMonth('date', $month)
+                ->with('category')
                 ->get();
 
-            $totalBaseAmount = (float) $categoryRows->sum('amount');
-            $totalSpend = $formatSpend($totalBaseAmount);
+            $totalConvertedCents = 0;
+            $categoryGroups = [];
+            $weeklyCents = [1 => 0, 2 => 0, 3 => 0, 4 => 0];
 
-            $byCategory = $categoryRows->map(function ($row) use ($totalBaseAmount, $formatSpend) {
-                $catAmount = (float) $row->amount;
-                $spend = $formatSpend($catAmount);
+            foreach ($transactions as $tx) {
+                $cents = (int) round(((float) $tx->amount) * 100);
+                $txDate = Carbon::parse($tx->date);
+                $convertedCents = $currencyService->convert($cents, $currency, $txDate);
+                $totalConvertedCents += $convertedCents;
 
-                return [
-                    'id' => $row->id,
-                    'name' => $row->name,
-                    'slug' => $row->slug,
-                    'color' => $row->color,
-                    'amount' => $spend['amount'],
-                    'display' => $spend['display'],
-                    'percentage' => $totalBaseAmount > 0 ? round(($catAmount / $totalBaseAmount) * 100, 2) : 0.0,
-                ];
-            });
+                // Category grouping
+                $category = $tx->category;
+                $categoryId = $category?->id ?? 0;
+                if (! isset($categoryGroups[$categoryId])) {
+                    $categoryGroups[$categoryId] = [
+                        'id' => $categoryId,
+                        'name' => $category?->name ?? 'Other',
+                        'slug' => $category?->slug ?? 'other',
+                        'color' => $category?->color ?? '#6B7280',
+                        'cents' => 0,
+                    ];
+                }
+                $categoryGroups[$categoryId]['cents'] += $convertedCents;
 
-            // 3. Previous Month Total Spend (Single aggregated SUM query in base amount, converted once)
-            $prevDate = Carbon::createFromDate($year, $month, 1)->subMonth()->endOfMonth();
-            $prevMonthBaseAmount = (float) (clone $baseQuery)
-                ->whereYear('transactions.date', $prevDate->year)
-                ->whereMonth('transactions.date', $prevDate->month)
-                ->sum('transactions.amount');
-
-            $prevSpend = $formatSpend($prevMonthBaseAmount, $prevDate);
-
-            $comparison = [
-                'previous_month' => Carbon::createFromDate($year, $month, 1)->subMonth()->format('F'),
-                'previous_total' => $prevSpend['amount'],
-                'display' => $prevSpend['display'],
-            ];
-
-            // 4. Weekly Breakdown (4 indexed date-range SUM queries)
-            $daysInMonth = Carbon::createFromDate($year, $month, 1)->daysInMonth;
-            $weekRanges = [
-                ['label' => 'Week 1', 'start' => 1, 'end' => 7],
-                ['label' => 'Week 2', 'start' => 8, 'end' => 14],
-                ['label' => 'Week 3', 'start' => 15, 'end' => 21],
-                ['label' => 'Week 4', 'start' => 22, 'end' => $daysInMonth],
-            ];
-
-            $weeklyBreakdown = [];
-            foreach ($weekRanges as $range) {
-                $startDate = Carbon::createFromDate($year, $month, $range['start'])->toDateString();
-                $endDate = Carbon::createFromDate($year, $month, $range['end'])->toDateString();
-
-                $weekSpend = (float) (clone $baseQuery)
-                    ->whereBetween('transactions.date', [$startDate, $endDate])
-                    ->sum('transactions.amount');
-
-                $weeklyBreakdown[] = [
-                    'label' => $range['label'],
-                    'percentage' => $totalBaseAmount > 0 ? round(($weekSpend / $totalBaseAmount) * 100, 2) : 0.0,
-                ];
+                // Weekly bucket (Week 1: 1-7, Week 2: 8-14, Week 3: 15-21, Week 4: 22+)
+                $day = $txDate->day;
+                $weekIndex = $day <= 7 ? 1 : ($day <= 14 ? 2 : ($day <= 21 ? 3 : 4));
+                $weeklyCents[$weekIndex] += $convertedCents;
             }
 
-            $data = [
-                'month' => $monthName,
+            // 3. Category distribution
+            $byCategory = collect($categoryGroups)->map(function ($cat) use ($totalConvertedCents, $currencyService, $currency, $decimals) {
+                $amount = round($cat['cents'] / (10 ** $decimals), $decimals);
+
+                return [
+                    'id' => $cat['id'],
+                    'name' => $cat['name'],
+                    'slug' => $cat['slug'],
+                    'color' => $cat['color'],
+                    'amount' => $amount,
+                    'display' => $currencyService->formatConverted($cat['cents'], $currency),
+                    'percentage' => $totalConvertedCents > 0 ? round(($cat['cents'] / $totalConvertedCents) * 100, 2) : 0.0,
+                ];
+            })->sortByDesc('amount')->values()->all();
+
+            // 4. Weekly breakdown
+            $weeklyBreakdown = [
+                ['label' => 'Week 1', 'percentage' => $totalConvertedCents > 0 ? round(($weeklyCents[1] / $totalConvertedCents) * 100, 2) : 0.0],
+                ['label' => 'Week 2', 'percentage' => $totalConvertedCents > 0 ? round(($weeklyCents[2] / $totalConvertedCents) * 100, 2) : 0.0],
+                ['label' => 'Week 3', 'percentage' => $totalConvertedCents > 0 ? round(($weeklyCents[3] / $totalConvertedCents) * 100, 2) : 0.0],
+                ['label' => 'Week 4', 'percentage' => $totalConvertedCents > 0 ? round(($weeklyCents[4] / $totalConvertedCents) * 100, 2) : 0.0],
+            ];
+
+            // 5. Previous month comparison
+            $prevDate = Carbon::createFromDate($year, $month, 1)->subMonth();
+            $prevTransactions = (clone $baseQuery)
+                ->whereYear('date', $prevDate->year)
+                ->whereMonth('date', $prevDate->month)
+                ->get();
+
+            $prevCents = $prevTransactions->sum(function ($tx) use ($currencyService, $currency) {
+                return $currencyService->convert((int) round(((float) $tx->amount) * 100), $currency, Carbon::parse($tx->date));
+            });
+
+            $comparison = [
+                'previous_month' => $prevDate->format('F'),
+                'previous_total' => round($prevCents / (10 ** $decimals), $decimals),
+                'display' => $currencyService->formatConverted($prevCents, $currency),
+            ];
+
+            $totalSpend = round($totalConvertedCents / (10 ** $decimals), $decimals);
+
+            return $this->successResponse([
+                'month' => Carbon::createFromDate($year, $month, 1)->format('F'),
                 'year' => $year,
                 'scope' => $isPersonal ? 'personal' : 'household',
                 'currency' => $currency,
-                'total_spend' => $totalSpend['amount'],
-                'display' => $totalSpend['display'],
+                'total_spend' => $totalSpend,
+                'display' => $currencyService->formatConverted($totalConvertedCents, $currency),
                 'comparison' => $comparison,
                 'weekly_breakdown' => $weeklyBreakdown,
                 'by_category' => $byCategory,
-            ];
-
-            return $this->successResponse($data, 'Report retrieved successfully.');
+            ], 'Report retrieved successfully.');
         } catch (Throwable $e) {
             Log::error('Fetch report failed: '.$e->getMessage());
 
@@ -149,7 +143,7 @@ class ReportController extends Controller
     }
 
     /**
-     * Export report data as a downloadable CSV.
+     * Export report data as a downloadable CSV with converted amounts and currency context.
      */
     public function export(Request $request): StreamedResponse|JsonResponse
     {
@@ -168,8 +162,7 @@ class ReportController extends Controller
 
             $monthName = Carbon::createFromDate($year, $month, 1)->format('F');
 
-            $query = Transaction::query()
-                ->where('family_id', $familyId)
+            $query = Transaction::where('family_id', $familyId)
                 ->where('type', 'expense')
                 ->whereYear('date', $year)
                 ->whereMonth('date', $month)
@@ -184,6 +177,11 @@ class ReportController extends Controller
 
             $transactions = $query->get();
 
+            $currency = tenant('currency') ?: config('app.base_currency', 'USD');
+            $currencyService = app(CurrencyService::class);
+            $decimals = $currencyService->getCurrencyModel($currency)?->decimal_places ?? 2;
+            $baseCurrency = strtoupper((string) config('app.base_currency', 'USD'));
+
             $fileName = "report-{$monthName}-{$year}.csv";
 
             $headers = [
@@ -191,17 +189,38 @@ class ReportController extends Controller
                 'Content-Disposition' => "attachment; filename=\"{$fileName}\"",
             ];
 
-            $callback = function () use ($transactions) {
+            $callback = function () use ($transactions, $currencyService, $currency, $decimals, $baseCurrency) {
                 $file = fopen('php://output', 'w');
-                fputcsv($file, ['ID', 'Date', 'Category', 'Type', 'Amount', 'Note', 'Visibility', 'User']);
+                fputcsv($file, [
+                    'ID',
+                    'Date',
+                    'Category',
+                    'Type',
+                    'Amount',
+                    'Currency',
+                    'Formatted',
+                    'Base Amount',
+                    'Base Currency',
+                    'Note',
+                    'Visibility',
+                    'User',
+                ]);
 
                 foreach ($transactions as $tx) {
+                    $cents = (int) round(((float) $tx->amount) * 100);
+                    $display = $currencyService->formatWithDisplay($cents, $currency, Carbon::parse($tx->date));
+                    $convertedAmount = round($display['amount_cents'] / (10 ** $decimals), $decimals);
+
                     fputcsv($file, [
                         $tx->id,
-                        $tx->getRawOriginal('date'),
+                        $tx->date,
                         $tx->category?->name ?? 'Expense',
                         $tx->type,
+                        $convertedAmount,
+                        $currency,
+                        $display['formatted'],
                         $tx->amount,
+                        $baseCurrency,
                         $tx->note ?? '',
                         $tx->visibility,
                         $tx->user?->name ?? '',

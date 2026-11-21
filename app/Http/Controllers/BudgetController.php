@@ -166,7 +166,12 @@ class BudgetController extends Controller
             $validated = $validator->validated();
             $month = $validated['month'] ?? now()->month;
             $year = $validated['year'] ?? now()->year;
-            $amount = $validated['amount'];
+            $rawAmount = (float) $validated['amount'];
+
+            $currency = tenant('currency') ?: config('app.base_currency', 'USD');
+            $currencyService = app(CurrencyService::class);
+            $budgetDate = Carbon::createFromDate($year, $month, 1)->endOfMonth();
+            $baseAmount = $currencyService->convertToBaseAmount($rawAmount, $currency, $budgetDate);
 
             if (! empty($validated['id'])) {
                 $budget = Budget::where('family_id', $familyId)->find($validated['id']);
@@ -177,13 +182,16 @@ class BudgetController extends Controller
 
                 $budget->update([
                     'category_id' => $validated['category_id'],
-                    'amount' => $amount,
+                    'amount' => $baseAmount,
                     'month' => $month,
                     'year' => $year,
                 ]);
 
+                $budgetData = $budget->fresh(['category'])->toArray();
+                $budgetData['display'] = $currencyService->formatWithDisplay((int) round((float) $budget->amount * 100), $currency, $budgetDate);
+
                 return $this->successResponse(
-                    $budget->fresh(['category']),
+                    $budgetData,
                     'Budget updated successfully.',
                     200
                 );
@@ -197,12 +205,15 @@ class BudgetController extends Controller
                     'year' => $year,
                 ],
                 [
-                    'amount' => $amount,
+                    'amount' => $baseAmount,
                 ]
             );
 
+            $budgetData = $budget->fresh(['category'])->toArray();
+            $budgetData['display'] = $currencyService->formatWithDisplay((int) round((float) $budget->amount * 100), $currency, $budgetDate);
+
             return $this->successResponse(
-                $budget->fresh(['category']),
+                $budgetData,
                 'Budget saved successfully.',
                 201
             );

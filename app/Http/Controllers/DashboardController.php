@@ -15,6 +15,7 @@ class DashboardController extends Controller
 {
     /**
      * Display the consolidated dashboard data for household and personal spending.
+     * All transactions are converted on-the-fly using the exchange rate of their individual transaction dates.
      */
     public function index(Request $request): JsonResponse
     {
@@ -33,43 +34,48 @@ class DashboardController extends Controller
             $month = $request->integer('month', now()->month);
             $year = $request->integer('year', now()->year);
             $monthName = Carbon::createFromDate($year, $month, 1)->format('F');
-            $monthDate = Carbon::createFromDate($year, $month, 1)->endOfMonth();
 
-            // Helper to convert base amount and generate display structure for the month
-            $formatSpend = function (float $amount) use ($currencyService, $currency, $monthDate, $decimals): array {
-                $cents = (int) round($amount * 100);
-                $convertedCents = $currencyService->convert($cents, $currency, $monthDate);
+            // Helper to convert transactions by their individual transaction dates
+            $convertTransactionsTotal = function ($txs) use ($currencyService, $currency, $decimals): array {
+                $totalCents = 0;
+                foreach ($txs as $tx) {
+                    $c = (int) round(((float) $tx->amount) * 100);
+                    $txDate = Carbon::parse($tx->date);
+                    $totalCents += $currencyService->convert($c, $currency, $txDate);
+                }
+
+                $units = round($totalCents / (10 ** $decimals), $decimals);
 
                 return [
-                    'amount' => round($convertedCents / (10 ** $decimals), $decimals),
-                    'display' => $currencyService->formatWithDisplay($cents, $currency, $monthDate),
+                    'amount' => $units,
+                    'display' => $currencyService->formatConverted($totalCents, $currency),
                 ];
             };
 
-            // 1. Household shared spend for the given month
-            $householdAmount = (float) Transaction::where('family_id', $familyId)
+            // 1. Household shared spend for the given month (converting each on its date)
+            $householdTxs = Transaction::where('family_id', $familyId)
                 ->where('visibility', 'shared')
                 ->where('type', 'expense')
                 ->whereYear('date', $year)
                 ->whereMonth('date', $month)
-                ->sum('amount');
+                ->get(['amount', 'date']);
 
-            $household = $formatSpend($householdAmount);
+            $household = $convertTransactionsTotal($householdTxs);
 
             // 2. Household spend by member
             $membersSpend = [];
             $familyMembers = User::where('family_id', $familyId)->get();
 
             foreach ($familyMembers as $member) {
-                $memberAmount = (float) Transaction::where('family_id', $familyId)
+                $memberTxs = Transaction::where('family_id', $familyId)
                     ->where('user_id', $member->id)
                     ->where('visibility', 'shared')
                     ->where('type', 'expense')
                     ->whereYear('date', $year)
                     ->whereMonth('date', $month)
-                    ->sum('amount');
+                    ->get(['amount', 'date']);
 
-                $spend = $formatSpend($memberAmount);
+                $spend = $convertTransactionsTotal($memberTxs);
                 $isCurrentUser = $member->id === $user->id;
 
                 $membersSpend[] = [
@@ -94,16 +100,16 @@ class DashboardController extends Controller
                 return $b['amount'] <=> $a['amount'];
             });
 
-            // 3. Personal spend for the current user
-            $personalAmount = (float) Transaction::where('family_id', $familyId)
+            // 3. Personal spend for the current user (converting each on its date)
+            $personalTxs = Transaction::where('family_id', $familyId)
                 ->where('user_id', $user->id)
                 ->where('visibility', 'personal')
                 ->where('type', 'expense')
                 ->whereYear('date', $year)
                 ->whereMonth('date', $month)
-                ->sum('amount');
+                ->get(['amount', 'date']);
 
-            $personal = $formatSpend($personalAmount);
+            $personal = $convertTransactionsTotal($personalTxs);
 
             // Helper to format a recent transaction
             $formatRecent = function ($tx) use ($currencyService, $currency): array {

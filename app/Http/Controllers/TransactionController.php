@@ -119,11 +119,15 @@ class TransactionController extends Controller
                 return $this->errorResponse('Family context is required.', 400);
             }
 
+            $currency = tenant('currency') ?: config('app.base_currency', 'USD');
+            $currencyService = app(CurrencyService::class);
+
             $date = $request->filled('date')
                 ? Carbon::parse($request->input('date'))->toDateString()
                 : now()->toDateString();
 
-            $amount = (float) $validated['amount'];
+            $rawAmount = (float) $validated['amount'];
+            $baseAmount = $currencyService->convertToBaseAmount($rawAmount, $currency, Carbon::parse($date));
 
             // Update existing transaction if 'id' is provided
             if (! empty($validated['id'])) {
@@ -140,7 +144,7 @@ class TransactionController extends Controller
                 $transaction->update([
                     'category_id' => $validated['category_id'],
                     'type' => $validated['type'],
-                    'amount' => $amount,
+                    'amount' => $baseAmount,
                     'date' => $request->filled('date') ? $date : $transaction->date,
                     'note' => $validated['note'] ?? null,
                     'payment_method' => $validated['payment_method'] ?? null,
@@ -160,7 +164,7 @@ class TransactionController extends Controller
                 'user_id' => $user->id,
                 'category_id' => $validated['category_id'],
                 'type' => $validated['type'],
-                'amount' => $amount,
+                'amount' => $baseAmount,
                 'date' => $date,
                 'note' => $validated['note'] ?? null,
                 'payment_method' => $validated['payment_method'] ?? null,
