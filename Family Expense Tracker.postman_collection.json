@@ -1,0 +1,1023 @@
+{
+  "info": {
+    "_postman_id": "a8a46d9d-1c1a-4b42-a9ab-6c5f0a1c2026",
+    "name": "Family Expense Tracker API",
+    "description": "Import this collection into Postman. Set baseUrl, authenticate with Register/Login, and set familyId to the selected family UUID. All routes are derived from routes/api.php; tenant-scoped requests include X-Family-Id.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000/api",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "familyId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "transactionId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "debtId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "budgetId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "memberId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "categoryId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "month",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "year",
+      "value": "2026",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "register"
+              ]
+            },
+            "description": "Register a user. Omit invite_code to create a new family, or supply an existing family UUID to join it.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Alex Morgan\",\n  \"email\": \"alex@example.com\",\n  \"password\": \"password123\",\n  \"password_confirmation\": \"password123\",\n  \"family_name\": \"Morgan Family\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const response = pm.response.json();",
+                  "  const payload = response.data || {};",
+                  "  if (payload.access_token) pm.collectionVariables.set('token', payload.access_token);",
+                  "  const family = payload.user && payload.user.family;",
+                  "  if (family && family.id) pm.collectionVariables.set('familyId', family.id);",
+                  "  const families = payload.families || [];",
+                  "  if (!pm.collectionVariables.get('familyId') && families.length && families[0].id) pm.collectionVariables.set('familyId', families[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "login"
+              ]
+            },
+            "description": "Login and automatically save data.access_token and a familyId when available.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"alex@example.com\",\n  \"password\": \"password123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code >= 200 && pm.response.code < 300) {",
+                  "  const response = pm.response.json();",
+                  "  const payload = response.data || {};",
+                  "  if (payload.access_token) pm.collectionVariables.set('token', payload.access_token);",
+                  "  const family = payload.user && payload.user.family;",
+                  "  if (family && family.id) pm.collectionVariables.set('familyId', family.id);",
+                  "  const families = payload.families || [];",
+                  "  if (!pm.collectionVariables.get('familyId') && families.length && families[0].id) pm.collectionVariables.set('familyId', families[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Forgot password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/forgot-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "forgot-password"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"alex@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Reset password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reset-password"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"123456\",\n  \"password\": \"newpassword123\",\n  \"password_confirmation\": \"newpassword123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Get current user",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/user",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "user"
+              ]
+            },
+            "description": "Returns the authenticated user and their families."
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "logout"
+              ]
+            },
+            "description": "Revokes the current Sanctum access token."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Categories",
+      "item": [
+        {
+          "name": "List categories",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "categories"
+              ]
+            },
+            "description": "Authenticated category listing. Does not require X-Family-Id."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transactions",
+      "item": [
+        {
+          "name": "List transactions (plural alias)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions?type=expense&visibility=shared&per_page=15",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "expense",
+                  "disabled": false
+                },
+                {
+                  "key": "visibility",
+                  "value": "shared",
+                  "disabled": false
+                },
+                {
+                  "key": "per_page",
+                  "value": "15",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "List transactions. Optional filters: type, user_id, category_id, visibility, start_date, end_date, month, year, search, per_page."
+          }
+        },
+        {
+          "name": "List transactions (singular alias)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transaction/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transaction",
+                ""
+              ]
+            },
+            "description": "Alias for transaction listing."
+          }
+        },
+        {
+          "name": "Create transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transaction/save",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transaction",
+                "save"
+              ]
+            },
+            "description": "Create an expense or income. To update, include id in the same payload.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"expense\",\n  \"amount\": 125.5,\n  \"category_id\": 1,\n  \"date\": \"2026-11-21\",\n  \"note\": \"Groceries\",\n  \"payment_method\": \"UPI\",\n  \"visibility\": \"shared\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Get transaction",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transaction/{{transactionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transaction",
+                "{{transactionId}}"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Delete transaction",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transaction/{{transactionId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transaction",
+                "{{transactionId}}"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "Debts",
+      "item": [
+        {
+          "name": "List debts (plural alias)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/debts?type=lent&status=pending&per_page=15",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "debts"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "lent",
+                  "disabled": false
+                },
+                {
+                  "key": "status",
+                  "value": "pending",
+                  "disabled": false
+                },
+                {
+                  "key": "per_page",
+                  "value": "15",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Optional filters: type, status, visibility, search, start_date, end_date, due_date, per_page."
+          }
+        },
+        {
+          "name": "List debts (singular alias)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/debt/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "debt",
+                ""
+              ]
+            },
+            "description": "Alias for debt listing."
+          }
+        },
+        {
+          "name": "Create debt",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/debt/save",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "debt",
+                "save"
+              ]
+            },
+            "description": "Create a lent or borrowed record. Include id to update an existing debt.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"person_name\": \"Jordan Lee\",\n  \"type\": \"lent\",\n  \"amount\": 500,\n  \"date\": \"2026-11-21\",\n  \"due_date\": \"2026-12-01\",\n  \"note\": \"Shared dinner\",\n  \"visibility\": \"shared\",\n  \"status\": \"pending\",\n  \"category_id\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Get debt",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/debt/{{debtId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "debt",
+                "{{debtId}}"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Settle debt",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/debt/{{debtId}}/settle",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "debt",
+                "{{debtId}}",
+                "settle"
+              ]
+            },
+            "description": "Marks the debt as settled and creates the corresponding settlement transaction."
+          }
+        },
+        {
+          "name": "Delete debt",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/debt/{{debtId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "debt",
+                "{{debtId}}"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard & Family",
+      "item": [
+        {
+          "name": "Get dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard?month={{month}}&year={{year}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dashboard"
+              ],
+              "query": [
+                {
+                  "key": "month",
+                  "value": "{{month}}",
+                  "disabled": false
+                },
+                {
+                  "key": "year",
+                  "value": "{{year}}",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Month and year default to the current month/year."
+          }
+        },
+        {
+          "name": "List family members",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/family/members",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "family",
+                "members"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Get family member",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/family/members/{{memberId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "family",
+                "members",
+                "{{memberId}}"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "Get report analytics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reports?month={{month}}&year={{year}}&scope=household",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reports"
+              ],
+              "query": [
+                {
+                  "key": "month",
+                  "value": "{{month}}",
+                  "disabled": false
+                },
+                {
+                  "key": "year",
+                  "value": "{{year}}",
+                  "disabled": false
+                },
+                {
+                  "key": "scope",
+                  "value": "household",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "scope may be household or personal."
+          }
+        },
+        {
+          "name": "Export report CSV",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reports/export?month={{month}}&year={{year}}&scope=household",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reports",
+                "export"
+              ],
+              "query": [
+                {
+                  "key": "month",
+                  "value": "{{month}}",
+                  "disabled": false
+                },
+                {
+                  "key": "year",
+                  "value": "{{year}}",
+                  "disabled": false
+                },
+                {
+                  "key": "scope",
+                  "value": "household",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Returns a downloadable CSV response. scope may be household or personal."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Budgets",
+      "item": [
+        {
+          "name": "List budgets",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/budgets?month={{month}}&year={{year}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "budgets"
+              ],
+              "query": [
+                {
+                  "key": "month",
+                  "value": "{{month}}",
+                  "disabled": false
+                },
+                {
+                  "key": "year",
+                  "value": "{{year}}",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Create budget",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/budget/save",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "budget",
+                "save"
+              ]
+            },
+            "description": "Create or upsert a category budget. Include id to update an existing budget.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category_id\": 1,\n  \"amount\": 1500,\n  \"month\": 11,\n  \"year\": 2026\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete budget",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/budget/{{budgetId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "budget",
+                "{{budgetId}}"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    }
+  ]
+}
