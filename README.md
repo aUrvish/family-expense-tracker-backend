@@ -34,13 +34,35 @@ cp .env.example .env
 php artisan key:generate
 ```
 
+#### Environment Configuration (.env)
+Configure your base currency and optional exchange rate provider keys:
+```env
+BASE_CURRENCY=USD
+EXCHANGERATE_API_KEY=your_optional_exchangerate_api_key_here
+```
+- `BASE_CURRENCY`: Base currency code (ISO 4217, default `USD`). All money is stored in base currency integer cents (`amount_cents`).
+- `EXCHANGERATE_API_KEY`: Optional fallback key for ExchangeRate-API when Frankfurter is unreachable.
+
 ### 3. Database Migration & Seeding
-Run migrations and seed the initial categories:
+Run migrations and seed the initial categories and currencies:
 ```bash
 php artisan migrate --seed
 ```
 
-### 4. Creating an Admin User
+### 4. Exchange Rates Management & Scheduler
+Fetch latest daily exchange rates:
+```bash
+# Fetch latest daily rates (Frankfurter API with fallback to ExchangeRate-API)
+php artisan rates:fetch
+```
+
+#### Automated Daily Scheduler
+To ensure daily exchange rates are fetched automatically, add Laravel's cron entry to your server:
+```bash
+* * * * * cd /path-to-your-project && php artisan schedule:run >> /dev/null 2>&1
+```
+
+### 5. Creating an Admin User
 Create an administrator in the `admins` table:
 ```bash
 php artisan make:filament-user
@@ -65,6 +87,16 @@ Access the administration console at: `http://localhost:8000/console` (Login at 
    - Columns: User Name, Email, Associated Family Name, Family UUID, and Registered Date.
    - Filter users by family.
    - Click **View** to inspect user profile.
+
+---
+
+## 💱 Global Multi-Currency Architecture
+
+- **Single Base Currency**: All monetary values (`transactions`, `debts`, `budgets`) are stored **once** in the single `amount` column in the base currency configured via `config('app.base_currency')` (default `USD`).
+- **Zero & Variable Decimals**: Native support for variable currency decimal places (e.g., JPY = 0, USD = 2, KWD = 3).
+- **On-Demand Conversion**: Stored database records are never modified when changing currency. Amounts are converted for display using the exchange rate of the transaction/expense date (or the latest rate on or before that date).
+- **Totals & Aggregations**: Reports, dashboard totals, and budgets sum base amounts first, and convert once at the end to guarantee rounding accuracy.
+- **Family Currency**: Preferred currency is configured on the `Family` tenant model (`families.currency`), defaulting to `USD`.
 
 ---
 

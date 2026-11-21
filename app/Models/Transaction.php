@@ -8,6 +8,20 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property int $id
+ * @property string $family_id
+ * @property int $user_id
+ * @property int $category_id
+ * @property string $type 'expense' or 'income'
+ * @property string $amount Decimal amount
+ * @property int|string $date
+ * @property string|null $note
+ * @property string|null $payment_method
+ * @property string $visibility 'shared' or 'personal'
+ * @property int|string|null $created_at
+ * @property int|string|null $updated_at
+ */
 #[Fillable([
     'family_id',
     'user_id',

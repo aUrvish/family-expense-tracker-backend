@@ -123,4 +123,15 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Base Currency
+    |--------------------------------------------------------------------------
+    |
+    | The default base currency used to store all monetary amounts in cents.
+    |
+    */
+
+    'base_currency' => env('BASE_CURRENCY', 'USD'),
+
 ];

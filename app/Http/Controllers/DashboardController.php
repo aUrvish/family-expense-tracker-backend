@@ -2,8 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Family;
 use App\Models\Transaction;
+use App\Models\User;
+use App\Services\CurrencyService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -25,34 +26,42 @@ class DashboardController extends Controller
             }
 
             $user = $request->user();
-            $family = Family::find($familyId);
+            $currency = tenant('currency') ?: config('app.base_currency', 'USD');
+            $currencyService = app(CurrencyService::class);
+            $decimals = $currencyService->getCurrencyModel($currency)?->decimal_places ?? 2;
 
-            if (! $family) {
-                return $this->errorResponse('Family not found.', 404);
-            }
-
-            // Month and year selection (defaults to current month and year)
             $month = $request->integer('month', now()->month);
             $year = $request->integer('year', now()->year);
             $monthName = Carbon::createFromDate($year, $month, 1)->format('F');
+            $monthDate = Carbon::createFromDate($year, $month, 1)->endOfMonth();
+
+            // Helper to convert base amount and generate display structure for the month
+            $formatSpend = function (float $amount) use ($currencyService, $currency, $monthDate, $decimals): array {
+                $cents = (int) round($amount * 100);
+                $convertedCents = $currencyService->convert($cents, $currency, $monthDate);
+
+                return [
+                    'amount' => round($convertedCents / (10 ** $decimals), $decimals),
+                    'display' => $currencyService->formatWithDisplay($cents, $currency, $monthDate),
+                ];
+            };
 
             // 1. Household shared spend for the given month
-            $householdSharedQuery = Transaction::query()
-                ->where('family_id', $familyId)
+            $householdAmount = (float) Transaction::where('family_id', $familyId)
                 ->where('visibility', 'shared')
                 ->where('type', 'expense')
                 ->whereYear('date', $year)
-                ->whereMonth('date', $month);
+                ->whereMonth('date', $month)
+                ->sum('amount');
 
-            $householdTotalSpend = (float) (clone $householdSharedQuery)->sum('amount');
+            $household = $formatSpend($householdAmount);
 
             // 2. Household spend by member
-            $familyMembers = $family->users()->get();
             $membersSpend = [];
+            $familyMembers = User::where('family_id', $familyId)->get();
 
             foreach ($familyMembers as $member) {
-                $memberSpend = (float) Transaction::query()
-                    ->where('family_id', $familyId)
+                $memberAmount = (float) Transaction::where('family_id', $familyId)
                     ->where('user_id', $member->id)
                     ->where('visibility', 'shared')
                     ->where('type', 'expense')
@@ -60,6 +69,7 @@ class DashboardController extends Controller
                     ->whereMonth('date', $month)
                     ->sum('amount');
 
+                $spend = $formatSpend($memberAmount);
                 $isCurrentUser = $member->id === $user->id;
 
                 $membersSpend[] = [
@@ -68,11 +78,11 @@ class DashboardController extends Controller
                     'display_name' => $isCurrentUser ? 'You' : $member->name,
                     'avatar_initial' => strtoupper(substr($member->name, 0, 1)),
                     'is_current_user' => $isCurrentUser,
-                    'amount' => $memberSpend,
+                    'amount' => $spend['amount'],
+                    'display' => $spend['display'],
                 ];
             }
 
-            // Order members: current user first, then others by spend descending
             usort($membersSpend, function ($a, $b) {
                 if ($a['is_current_user']) {
                     return -1;
@@ -84,9 +94,8 @@ class DashboardController extends Controller
                 return $b['amount'] <=> $a['amount'];
             });
 
-            // 3. Current user's personal spend for the given month
-            $myPersonalSpend = (float) Transaction::query()
-                ->where('family_id', $familyId)
+            // 3. Personal spend for the current user
+            $personalAmount = (float) Transaction::where('family_id', $familyId)
                 ->where('user_id', $user->id)
                 ->where('visibility', 'personal')
                 ->where('type', 'expense')
@@ -94,9 +103,27 @@ class DashboardController extends Controller
                 ->whereMonth('date', $month)
                 ->sum('amount');
 
-            // 4. Recent household transactions (Top 5)
-            $recentHouseholdTransactions = Transaction::query()
-                ->where('family_id', $familyId)
+            $personal = $formatSpend($personalAmount);
+
+            // Helper to format a recent transaction
+            $formatRecent = function ($tx) use ($currencyService, $currency): array {
+                $cents = (int) round((float) $tx->amount * 100);
+                $date = Carbon::parse($tx->date ?? now());
+
+                return [
+                    'id' => $tx->id,
+                    'title' => $tx->note ?: ($tx->category?->name ?? 'Expense'),
+                    'note' => $tx->note,
+                    'amount' => (float) $tx->amount,
+                    'display' => $currencyService->formatWithDisplay($cents, $currency, $date),
+                    'date' => $tx->date,
+                    'user_name' => $tx->user?->name,
+                    'category' => $tx->category,
+                ];
+            };
+
+            // 4. Recent transactions
+            $recentHouseholdTransactions = Transaction::where('family_id', $familyId)
                 ->where('visibility', 'shared')
                 ->where('type', 'expense')
                 ->with(['category', 'user'])
@@ -104,21 +131,9 @@ class DashboardController extends Controller
                 ->orderByDesc('id')
                 ->limit(5)
                 ->get()
-                ->map(function ($tx) {
-                    return [
-                        'id' => $tx->id,
-                        'title' => $tx->category?->name ?? 'Expense',
-                        'note' => $tx->note,
-                        'amount' => (float) $tx->amount,
-                        'date' => $tx->date,
-                        'user_name' => $tx->user?->name,
-                        'category' => $tx->category,
-                    ];
-                });
+                ->map($formatRecent);
 
-            // 5. Recent personal transactions for the current user (Top 5)
-            $recentPersonalTransactions = Transaction::query()
-                ->where('family_id', $familyId)
+            $recentPersonalTransactions = Transaction::where('family_id', $familyId)
                 ->where('user_id', $user->id)
                 ->where('visibility', 'personal')
                 ->where('type', 'expense')
@@ -127,28 +142,20 @@ class DashboardController extends Controller
                 ->orderByDesc('id')
                 ->limit(5)
                 ->get()
-                ->map(function ($tx) {
-                    $title = ! empty($tx->note) ? $tx->note : ($tx->category?->name ?? 'Personal Expense');
-
-                    return [
-                        'id' => $tx->id,
-                        'title' => $title,
-                        'note' => $tx->note,
-                        'amount' => (float) $tx->amount,
-                        'date' => $tx->date,
-                        'category' => $tx->category,
-                    ];
-                });
+                ->map($formatRecent);
 
             $data = [
                 'month' => $monthName,
+                'currency' => $currency,
                 'household' => [
-                    'total_spend' => $householdTotalSpend,
+                    'total_spend' => $household['amount'],
+                    'display' => $household['display'],
                     'members' => $membersSpend,
                     'recent_transactions' => $recentHouseholdTransactions,
                 ],
                 'personal' => [
-                    'total_spend' => $myPersonalSpend,
+                    'total_spend' => $personal['amount'],
+                    'display' => $personal['display'],
                     'recent_transactions' => $recentPersonalTransactions,
                 ],
             ];

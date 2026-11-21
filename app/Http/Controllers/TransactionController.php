@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Transaction;
+use App\Services\CurrencyService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -78,8 +79,9 @@ class TransactionController extends Controller
             $query->orderByDesc('date')->orderByDesc('id');
 
             $transactions = $query->paginate($request->integer('per_page', 15));
+            $transactions->through(fn ($tx) => $this->formatTransaction($tx));
 
-            return $this->successResponse($transactions, 'Transactions retrieved successfully.'); /* */
+            return $this->successResponse($transactions, 'Transactions retrieved successfully.');
         } catch (Throwable $e) {
             Log::error('Fetch transactions failed: '.$e->getMessage());
 
@@ -121,6 +123,8 @@ class TransactionController extends Controller
                 ? Carbon::parse($request->input('date'))->toDateString()
                 : now()->toDateString();
 
+            $amount = (float) $validated['amount'];
+
             // Update existing transaction if 'id' is provided
             if (! empty($validated['id'])) {
                 $transaction = Transaction::where('family_id', $familyId)->find($validated['id']);
@@ -136,7 +140,7 @@ class TransactionController extends Controller
                 $transaction->update([
                     'category_id' => $validated['category_id'],
                     'type' => $validated['type'],
-                    'amount' => $validated['amount'],
+                    'amount' => $amount,
                     'date' => $request->filled('date') ? $date : $transaction->date,
                     'note' => $validated['note'] ?? null,
                     'payment_method' => $validated['payment_method'] ?? null,
@@ -144,7 +148,7 @@ class TransactionController extends Controller
                 ]);
 
                 return $this->successResponse(
-                    $transaction->fresh(),
+                    $this->formatTransaction($transaction->fresh()->load(['category', 'user'])),
                     ucfirst($validated['type']).' updated successfully.',
                     200
                 );
@@ -156,7 +160,7 @@ class TransactionController extends Controller
                 'user_id' => $user->id,
                 'category_id' => $validated['category_id'],
                 'type' => $validated['type'],
-                'amount' => $validated['amount'],
+                'amount' => $amount,
                 'date' => $date,
                 'note' => $validated['note'] ?? null,
                 'payment_method' => $validated['payment_method'] ?? null,
@@ -164,7 +168,7 @@ class TransactionController extends Controller
             ]);
 
             return $this->successResponse(
-                $transaction,
+                $this->formatTransaction($transaction->load(['category', 'user'])),
                 ucfirst($validated['type']).' added successfully.',
                 201
             );
@@ -198,7 +202,7 @@ class TransactionController extends Controller
                 return $this->errorResponse('Transaction not found.', 404);
             }
 
-            return $this->successResponse($transaction, 'Transaction retrieved successfully.');
+            return $this->successResponse($this->formatTransaction($transaction), 'Transaction retrieved successfully.');
         } catch (Throwable $e) {
             Log::error('Show transaction failed: '.$e->getMessage());
 
@@ -240,5 +244,22 @@ class TransactionController extends Controller
 
             return $this->errorResponse();
         }
+    }
+
+    /**
+     * Format a transaction model into an array with currency display metadata.
+     *
+     * @return array<string, mixed>
+     */
+    protected function formatTransaction(Transaction $transaction): array
+    {
+        $currency = tenant('currency') ?: config('app.base_currency', 'USD');
+        $cents = (int) round((float) $transaction->amount * 100);
+        $date = Carbon::parse($transaction->date ?? now());
+
+        $data = $transaction->toArray();
+        $data['display'] = app(CurrencyService::class)->formatWithDisplay($cents, $currency, $date);
+
+        return $data;
     }
 }

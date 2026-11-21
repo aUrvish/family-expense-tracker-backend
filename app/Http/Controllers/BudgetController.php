@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Budget;
 use App\Models\Transaction;
+use App\Services\CurrencyService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -27,6 +28,22 @@ class BudgetController extends Controller
 
             $month = $request->integer('month', now()->month);
             $year = $request->integer('year', now()->year);
+            $date = Carbon::createFromDate($year, $month, 1)->endOfMonth();
+
+            $currency = tenant('currency') ?: config('app.base_currency', 'USD');
+            $currencyService = app(CurrencyService::class);
+            $decimals = $currencyService->getCurrencyModel($currency)?->decimal_places ?? 2;
+
+            // Helper to convert base amount and format display for the month
+            $formatSpend = function (float $amount) use ($currencyService, $currency, $date, $decimals): array {
+                $cents = (int) round($amount * 100);
+                $convertedCents = $currencyService->convert($cents, $currency, $date);
+
+                return [
+                    'amount' => round($convertedCents / (10 ** $decimals), $decimals),
+                    'display' => $currencyService->formatWithDisplay($cents, $currency, $date),
+                ];
+            };
 
             // 1. Fetch budgets for active household and selected month
             $budgets = Budget::where('family_id', $familyId)
@@ -35,7 +52,7 @@ class BudgetController extends Controller
                 ->with(['category'])
                 ->get();
 
-            // 2. Aggregate shared expenses directly in SQL (no Eloquent model hydration)
+            // 2. Aggregate shared expenses directly in SQL in base amount
             $expenses = Transaction::where('family_id', $familyId)
                 ->where('visibility', 'shared')
                 ->where('type', 'expense')
@@ -46,40 +63,70 @@ class BudgetController extends Controller
                 ->pluck('total', 'category_id');
 
             // 3. Format category budgets
-            $categories = $budgets->map(function ($budget) use ($expenses) {
-                $spent = (float) ($expenses[$budget->category_id] ?? 0);
-                $budgetAmount = (float) $budget->amount;
-                $percentage = $budgetAmount > 0 ? round(($spent / $budgetAmount) * 100, 2) : 0.0;
-                $status = $spent > $budgetAmount ? 'over' : ($percentage >= 90 ? 'near_limit' : 'on_track');
+            $categories = $budgets->map(function ($budget) use ($expenses, $formatSpend, $decimals) {
+                $spentBase = (float) ($expenses[$budget->category_id] ?? 0);
+                $budgetBase = (float) $budget->amount;
+
+                $budgetSpend = $formatSpend($budgetBase);
+                $spentSpend = $formatSpend($spentBase);
+                $remainingSpend = $formatSpend(max(0.0, $budgetBase - $spentBase));
+
+                $budgetUnits = $budgetSpend['amount'];
+                $spentUnits = $spentSpend['amount'];
+                $remainingUnits = max(0.0, round($budgetUnits - $spentUnits, $decimals));
+                $overUnits = max(0.0, round($spentUnits - $budgetUnits, $decimals));
+
+                $percentage = $budgetBase > 0 ? round(($spentBase / $budgetBase) * 100, 2) : 0.0;
+                $status = $spentBase > $budgetBase ? 'over' : ($percentage >= 90 ? 'near_limit' : 'on_track');
 
                 return [
                     'id' => $budget->id,
                     'category_id' => $budget->category_id,
                     'category' => $budget->category,
-                    'budget' => $budgetAmount,
-                    'spent' => $spent,
-                    'remaining' => max(0.0, $budgetAmount - $spent),
+                    'budget' => $budgetUnits,
+                    'spent' => $spentUnits,
+                    'remaining' => $remainingUnits,
                     'percentage' => $percentage,
                     'status' => $status,
-                    'over_amount' => max(0.0, round($spent - $budgetAmount, 2)),
+                    'over_amount' => $overUnits,
+                    'display' => [
+                        'budget' => $budgetSpend['display'],
+                        'spent' => $spentSpend['display'],
+                        'remaining' => $remainingSpend['display'],
+                    ],
                 ];
             });
 
             // 4. Overall household budget summary
-            $totalBudget = (float) $categories->sum('budget');
-            $totalSpent = (float) $expenses->sum();
-            $percentage = $totalBudget > 0 ? round(($totalSpent / $totalBudget) * 100, 2) : 0.0;
+            $totalBudgetBase = (float) $budgets->sum('amount');
+            $totalSpentBase = (float) $expenses->sum();
+
+            $totalBudgetSpend = $formatSpend($totalBudgetBase);
+            $totalSpentSpend = $formatSpend($totalSpentBase);
+            $remainingBudgetSpend = $formatSpend(max(0.0, $totalBudgetBase - $totalSpentBase));
+
+            $totalBudget = $totalBudgetSpend['amount'];
+            $totalSpent = $totalSpentSpend['amount'];
+            $percentage = $totalBudgetBase > 0 ? round(($totalSpentBase / $totalBudgetBase) * 100, 2) : 0.0;
+            $remainingBudget = max(0.0, round($totalBudget - $totalSpent, $decimals));
+            $overTotal = max(0.0, round($totalSpent - $totalBudget, $decimals));
 
             $data = [
                 'month' => Carbon::createFromDate($year, $month, 1)->format('F'),
                 'year' => $year,
+                'currency' => $currency,
                 'summary' => [
                     'total_budget' => $totalBudget,
                     'total_spent' => $totalSpent,
-                    'remaining_budget' => max(0.0, $totalBudget - $totalSpent),
-                    'over_amount' => max(0.0, round($totalSpent - $totalBudget, 2)),
+                    'remaining_budget' => $remainingBudget,
+                    'over_amount' => $overTotal,
                     'percentage' => $percentage,
-                    'status' => $totalSpent > $totalBudget ? 'over' : ($percentage >= 90 ? 'near_limit' : 'on_track'),
+                    'status' => $totalSpentBase > $totalBudgetBase ? 'over' : ($percentage >= 90 ? 'near_limit' : 'on_track'),
+                    'display' => [
+                        'total_budget' => $totalBudgetSpend['display'],
+                        'total_spent' => $totalSpentSpend['display'],
+                        'remaining_budget' => $remainingBudgetSpend['display'],
+                    ],
                 ],
                 'by_category' => $categories,
             ];
@@ -119,6 +166,7 @@ class BudgetController extends Controller
             $validated = $validator->validated();
             $month = $validated['month'] ?? now()->month;
             $year = $validated['year'] ?? now()->year;
+            $amount = $validated['amount'];
 
             if (! empty($validated['id'])) {
                 $budget = Budget::where('family_id', $familyId)->find($validated['id']);
@@ -129,7 +177,7 @@ class BudgetController extends Controller
 
                 $budget->update([
                     'category_id' => $validated['category_id'],
-                    'amount' => $validated['amount'],
+                    'amount' => $amount,
                     'month' => $month,
                     'year' => $year,
                 ]);
@@ -149,7 +197,7 @@ class BudgetController extends Controller
                     'year' => $year,
                 ],
                 [
-                    'amount' => $validated['amount'],
+                    'amount' => $amount,
                 ]
             );
 

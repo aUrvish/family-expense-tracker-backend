@@ -7,6 +7,16 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property int $id
+ * @property string $family_id
+ * @property int $category_id
+ * @property string $amount Decimal amount
+ * @property int $month
+ * @property int $year
+ * @property int|string|null $created_at
+ * @property int|string|null $updated_at
+ */
 #[Fillable([
     'family_id',
     'category_id',

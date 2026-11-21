@@ -15,6 +15,7 @@ use Stancl\Tenancy\Database\Models\Tenant;
  *
  * @property string $id Unique UUID string identifying the family tenant
  * @property string $name Display name of the family
+ * @property string $currency Preferred family currency code
  * @property array<string, mixed>|null $data Additional tenant attributes
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -40,7 +41,15 @@ class Family extends Tenant
      */
     public static function getCustomColumns(): array
     {
-        return ['id', 'name'];
+        return ['id', 'name', 'currency'];
+    }
+
+    /**
+     * Get the effective currency code for this family.
+     */
+    public function effectiveCurrency(): string
+    {
+        return $this->currency ?: (string) config('app.base_currency', 'USD');
     }
 
     /**

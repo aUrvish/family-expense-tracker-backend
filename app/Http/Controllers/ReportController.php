@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Transaction;
+use App\Services\CurrencyService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -31,6 +32,23 @@ class ReportController extends Controller
             $isPersonal = $scope === 'personal';
 
             $monthName = Carbon::createFromDate($year, $month, 1)->format('F');
+            $monthDate = Carbon::createFromDate($year, $month, 1)->endOfMonth();
+
+            $currency = tenant('currency') ?: config('app.base_currency', 'USD');
+            $currencyService = app(CurrencyService::class);
+            $decimals = $currencyService->getCurrencyModel($currency)?->decimal_places ?? 2;
+
+            // Helper to convert base amount and format display for the given date
+            $formatSpend = function (float $amount, ?Carbon $date = null) use ($currencyService, $currency, $monthDate, $decimals): array {
+                $cents = (int) round($amount * 100);
+                $lookupDate = $date ?? $monthDate;
+                $convertedCents = $currencyService->convert($cents, $currency, $lookupDate);
+
+                return [
+                    'amount' => round($convertedCents / (10 ** $decimals), $decimals),
+                    'display' => $currencyService->formatWithDisplay($cents, $currency, $lookupDate),
+                ];
+            };
 
             // 1. Base query for active household / personal expenses
             $baseQuery = Transaction::query()
@@ -43,7 +61,7 @@ class ReportController extends Controller
                 $baseQuery->where('transactions.visibility', 'shared');
             }
 
-            // 2. Aggregate category spend in the database (efficient: 0 model hydration, scalable to high volume)
+            // 2. Aggregate category spend (sum base amount, convert once at end)
             $categoryRows = (clone $baseQuery)
                 ->whereYear('transactions.date', $year)
                 ->whereMonth('transactions.date', $month)
@@ -53,31 +71,37 @@ class ReportController extends Controller
                 ->orderByDesc('amount')
                 ->get();
 
-            $totalSpend = (float) $categoryRows->sum('amount');
+            $totalBaseAmount = (float) $categoryRows->sum('amount');
+            $totalSpend = $formatSpend($totalBaseAmount);
 
-            $byCategory = $categoryRows->map(function ($row) use ($totalSpend) {
-                $amount = (float) $row->amount;
+            $byCategory = $categoryRows->map(function ($row) use ($totalBaseAmount, $formatSpend) {
+                $catAmount = (float) $row->amount;
+                $spend = $formatSpend($catAmount);
 
                 return [
                     'id' => $row->id,
                     'name' => $row->name,
                     'slug' => $row->slug,
                     'color' => $row->color,
-                    'amount' => $amount,
-                    'percentage' => $totalSpend > 0 ? round(($amount / $totalSpend) * 100, 2) : 0.0,
+                    'amount' => $spend['amount'],
+                    'display' => $spend['display'],
+                    'percentage' => $totalBaseAmount > 0 ? round(($catAmount / $totalBaseAmount) * 100, 2) : 0.0,
                 ];
             });
 
-            // 3. Previous Month Total Spend (Single aggregated SUM query)
-            $prevDate = Carbon::createFromDate($year, $month, 1)->subMonth();
-            $prevMonthSpend = (float) (clone $baseQuery)
+            // 3. Previous Month Total Spend (Single aggregated SUM query in base amount, converted once)
+            $prevDate = Carbon::createFromDate($year, $month, 1)->subMonth()->endOfMonth();
+            $prevMonthBaseAmount = (float) (clone $baseQuery)
                 ->whereYear('transactions.date', $prevDate->year)
                 ->whereMonth('transactions.date', $prevDate->month)
                 ->sum('transactions.amount');
 
+            $prevSpend = $formatSpend($prevMonthBaseAmount, $prevDate);
+
             $comparison = [
-                'previous_month' => $prevDate->format('F'),
-                'previous_total' => $prevMonthSpend,
+                'previous_month' => Carbon::createFromDate($year, $month, 1)->subMonth()->format('F'),
+                'previous_total' => $prevSpend['amount'],
+                'display' => $prevSpend['display'],
             ];
 
             // 4. Weekly Breakdown (4 indexed date-range SUM queries)
@@ -100,7 +124,7 @@ class ReportController extends Controller
 
                 $weeklyBreakdown[] = [
                     'label' => $range['label'],
-                    'percentage' => $totalSpend > 0 ? round(($weekSpend / $totalSpend) * 100, 2) : 0.0,
+                    'percentage' => $totalBaseAmount > 0 ? round(($weekSpend / $totalBaseAmount) * 100, 2) : 0.0,
                 ];
             }
 
@@ -108,7 +132,9 @@ class ReportController extends Controller
                 'month' => $monthName,
                 'year' => $year,
                 'scope' => $isPersonal ? 'personal' : 'household',
-                'total_spend' => $totalSpend,
+                'currency' => $currency,
+                'total_spend' => $totalSpend['amount'],
+                'display' => $totalSpend['display'],
                 'comparison' => $comparison,
                 'weekly_breakdown' => $weeklyBreakdown,
                 'by_category' => $byCategory,

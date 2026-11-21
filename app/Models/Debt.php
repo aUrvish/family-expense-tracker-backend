@@ -8,6 +8,24 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property int $id
+ * @property string $family_id
+ * @property int $user_id
+ * @property string $person_name
+ * @property string $type 'lent' or 'borrowed'
+ * @property string $amount Decimal amount
+ * @property int|string $date
+ * @property int|string|null $due_date
+ * @property string|null $note
+ * @property string $visibility 'shared' or 'personal'
+ * @property string $status 'pending' or 'settled'
+ * @property int|string|null $settled_at
+ * @property int|null $transaction_id
+ * @property int|null $settlement_transaction_id
+ * @property int|string|null $created_at
+ * @property int|string|null $updated_at
+ */
 #[Fillable([
     'family_id',
     'user_id',
