@@ -2,9 +2,27 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 use Stancl\Tenancy\Database\Models\Tenant;
 
+/**
+ * Family tenant model representing a family unit within the application.
+ *
+ * Each family acts as an isolated tenant holding member users, transactions,
+ * debts, and budgets.
+ *
+ * @property string $id Unique UUID string identifying the family tenant
+ * @property string $name Display name of the family
+ * @property array<string, mixed>|null $data Additional tenant attributes
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ * @property-read Collection<int, User> $users
+ * @property-read Collection<int, Transaction> $transactions
+ * @property-read Collection<int, Debt> $debts
+ * @property-read Collection<int, Budget> $budgets
+ */
 class Family extends Tenant
 {
     /**
@@ -27,6 +45,8 @@ class Family extends Tenant
 
     /**
      * Get the users that belong to this family.
+     *
+     * @return HasMany<User, $this>
      */
     public function users(): HasMany
     {
@@ -35,6 +55,8 @@ class Family extends Tenant
 
     /**
      * Get the transactions for this family.
+     *
+     * @return HasMany<Transaction, $this>
      */
     public function transactions(): HasMany
     {
@@ -43,6 +65,8 @@ class Family extends Tenant
 
     /**
      * Get the debts for this family.
+     *
+     * @return HasMany<Debt, $this>
      */
     public function debts(): HasMany
     {
@@ -51,6 +75,8 @@ class Family extends Tenant
 
     /**
      * Get the budgets for this family.
+     *
+     * @return HasMany<Budget, $this>
      */
     public function budgets(): HasMany
     {

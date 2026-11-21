@@ -1,58 +1,85 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Family Expense Tracker - Backend & SaaS Admin Console
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+This repository powers the backend API for the "Family Expense Tracker" React Native application and includes a central Filament administration console (`/console`) for viewing registered families and their members.
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## 🏛️ Architecture & Tenancy
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- **Framework**: Laravel 13 (PHP 8.5+)
+- **Multi-Tenancy**: `stancl/tenancy` in single-database mode.
+  - Tenant model: `App\Models\Family` (UUID primary key).
+  - Identification: Mobile requests send `X-Family-Id: <UUID>` header, verified and scoped by `IdentifyFamily` middleware.
+  - Central SaaS Admin: The Filament console (`/console`) operates strictly in the **CENTRAL context** without tenancy scoping, allowing complete cross-family visibility.
+- **Security & Complete Model Isolation**:
+  - **`Admin` Model** (`admins` table): Exclusively dedicated to the Filament console using a separate `admin` authentication guard.
+  - **`User` Model** (`users` table): Dedicated exclusively to the mobile React Native app and tenant APIs.
+  - Normal mobile users cannot authenticate to the admin console under any circumstance (completely different guard and table).
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+---
 
-## Learning Laravel
+## 🚀 Setup & Local Development
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+### 1. Prerequisites
+- PHP 8.3+ (PHP 8.5 supported)
+- Composer 2.x
+- MySQL or SQLite (SQLite is pre-configured for automated tests)
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
+### 2. Installation
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+git clone <repo-url>
+cd family-expense-tracker
+composer install
+cp .env.example .env
+php artisan key:generate
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+### 3. Database Migration & Seeding
+Run migrations and seed the initial categories:
+```bash
+php artisan migrate --seed
+```
 
-## Contributing
+### 4. Creating an Admin User
+Create an administrator in the `admins` table:
+```bash
+php artisan make:filament-user
+```
+Or via Tinker:
+```bash
+php artisan tinker --execute="App\Models\Admin::create(['name' => 'Admin', 'email' => 'admin@example.com', 'password' => 'password']);"
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Access the administration console at: `http://localhost:8000/console` (Login at `http://localhost:8000/console/login`)
 
-## Code of Conduct
+---
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## 📋 Central Admin Resources
 
-## Security Vulnerabilities
+1. **Families (`/console/families`)**:
+   - View all families across tenants.
+   - Columns: Family Name, Family UUID, Member Count, and Registered Date.
+   - Click **View** to inspect family details.
+2. **Users (`/console/users`)**:
+   - View all registered users.
+   - Columns: User Name, Email, Associated Family Name, Family UUID, and Registered Date.
+   - Filter users by family.
+   - Click **View** to inspect user profile.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+---
 
-## License
+## 🧪 Testing
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+The test suite runs with Pest and PHPUnit on in-memory SQLite:
+```bash
+# Run all tests
+php artisan test --compact
+
+# Run admin tenancy isolation test
+php artisan test --filter=AdminTenancyIsolationTest
+```
+
+Code style is enforced via Laravel Pint:
+```bash
+vendor/bin/pint --dirty --test
+```

@@ -2,18 +2,39 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Carbon;
 use Laravel\Sanctum\HasApiTokens;
 
+/**
+ * Tenant user model representing mobile and web application users.
+ *
+ * Belongs to a family tenancy context and authenticates via Sanctum API tokens
+ * or the default `web` guard.
+ *
+ * @property int $id
+ * @property string $name
+ * @property string $email
+ * @property Carbon|null $email_verified_at
+ * @property string $password
+ * @property string|null $remember_token
+ * @property string|null $family_id
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ * @property-read Family|null $family
+ * @property-read Collection<int, Family> $families
+ * @property-read Collection<int, Transaction> $transactions
+ * @property-read Collection<int, Debt> $debts
+ */
 #[Fillable(['name', 'email', 'password', 'family_id'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
@@ -38,6 +59,8 @@ class User extends Authenticatable
 
     /**
      * Get the family that the user belongs to.
+     *
+     * @return BelongsTo<Family, $this>
      */
     public function family(): BelongsTo
     {
@@ -46,6 +69,8 @@ class User extends Authenticatable
 
     /**
      * Get all families associated with this user's email.
+     *
+     * @return HasManyThrough<Family, self, $this>
      */
     public function families(): HasManyThrough
     {
@@ -61,6 +86,8 @@ class User extends Authenticatable
 
     /**
      * Get the transactions recorded by this user.
+     *
+     * @return HasMany<Transaction, $this>
      */
     public function transactions(): HasMany
     {
@@ -69,6 +96,8 @@ class User extends Authenticatable
 
     /**
      * Get the debts recorded by this user.
+     *
+     * @return HasMany<Debt, $this>
      */
     public function debts(): HasMany
     {
