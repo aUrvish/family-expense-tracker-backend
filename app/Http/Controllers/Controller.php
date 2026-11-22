@@ -47,12 +47,14 @@ abstract class Controller
      * @param  string  $message  User-friendly error message.
      * @param  int  $statusCode  HTTP status code (default: 500).
      * @param  mixed  $errors  Optional validation errors or details.
+     * @param  array<string, string>  $headers  Optional HTTP response headers.
      * @return JsonResponse Structured JSON response.
      */
     public function errorResponse(
         string $message = 'Internal Server Error',
         int $statusCode = 500,
-        mixed $errors = null
+        mixed $errors = null,
+        array $headers = []
     ): JsonResponse {
         $response = [
             'status' => false,
@@ -63,14 +65,15 @@ abstract class Controller
             $response['errors'] = $errors;
         }
 
-        return response()->json($response, $statusCode);
+        return response()->json($response, $statusCode, $headers);
     }
 
     /**
      * Handle an exception caught in a controller.
      *
      * Expected client/HTTP exceptions (validation, authentication, authorization, not found, HTTP)
-     * are converted to their proper HTTP status and standard response structure.
+     * are converted to their proper HTTP status and standard response structure with client-safe messages.
+     * Internal exception messages and headers are sanitized so no database, model, or server details leak.
      * Unexpected server errors are logged with context and returned as a safe generic 500 response.
      *
      * @param  Throwable  $e  Caught exception.
@@ -88,19 +91,25 @@ abstract class Controller
         }
 
         if ($e instanceof AuthorizationException || $e instanceof AccessDeniedHttpException) {
-            return $this->errorResponse($e->getMessage() ?: 'This action is unauthorized.', 403);
+            $headers = $e instanceof HttpExceptionInterface ? $e->getHeaders() : [];
+
+            return $this->errorResponse('This action is unauthorized.', 403, null, $headers);
         }
 
         if ($e instanceof ModelNotFoundException || $e instanceof NotFoundHttpException) {
-            return $this->errorResponse($e->getMessage() ?: 'Resource not found.', 404);
+            $headers = $e instanceof HttpExceptionInterface ? $e->getHeaders() : [];
+
+            return $this->errorResponse('Resource not found.', 404, null, $headers);
         }
 
         if ($e instanceof HttpExceptionInterface) {
             $status = $e->getStatusCode();
 
             return $this->errorResponse(
-                $e->getMessage() ?: (Response::$statusTexts[$status] ?? 'HTTP Error'),
-                $status
+                Response::$statusTexts[$status] ?? 'HTTP Error',
+                $status,
+                null,
+                $e->getHeaders()
             );
         }
 
