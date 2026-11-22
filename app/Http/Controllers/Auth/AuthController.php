@@ -16,7 +16,6 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -49,29 +48,9 @@ class AuthController extends Controller
     public function register(Request $request): JsonResponse
     {
         try {
-            $inviteCode = $request->input('invite_code');
-            $invitation = null;
-
-            if ($inviteCode) {
-                $invitation = FamilyInvitation::where('code', $inviteCode)->first();
-
-                if (! $invitation || ! $invitation->isValid($request->input('email'))) {
-                    return $this->errorResponse('Validation failed.', 422, [
-                        'invite_code' => ['The provided invitation code is invalid or expired.'],
-                    ]);
-                }
-            }
-
-            $emailRules = ['required', 'email', 'max:255'];
-
-            // Email must be unique only inside the family being joined.
-            if ($invitation) {
-                $emailRules[] = Rule::unique('users', 'email')->where('family_id', $invitation->family_id);
-            }
-
             $validator = Validator::make($request->all(), [
                 'name' => ['required', 'string', 'max:255'],
-                'email' => $emailRules,
+                'email' => ['required', 'email', 'max:255'],
                 'password' => ['required', 'string', 'min:8', 'confirmed'],
                 'invite_code' => ['nullable', 'string', 'max:64'],
                 'family_name' => ['nullable', 'string', 'max:255'],
@@ -84,8 +63,19 @@ class AuthController extends Controller
             $data = $validator->validated();
 
             // Family and user are saved atomically: never a family without a user.
-            $user = DB::transaction(function () use ($data, $invitation) {
-                if ($invitation) {
+            $user = DB::transaction(function () use ($data) {
+                if (! empty($data['invite_code'])) {
+                    // Lock invitation row inside transaction to prevent race conditions
+                    $invitation = FamilyInvitation::where('code', $data['invite_code'])
+                        ->lockForUpdate()
+                        ->first();
+
+                    if (! $invitation || ! $invitation->isValid($data['email'])) {
+                        throw ValidationException::withMessages([
+                            'invite_code' => ['The provided invitation code is invalid, expired, or not authorized for this email.'],
+                        ]);
+                    }
+
                     $family = Family::findOrFail($invitation->family_id);
 
                     // Re-check inside the transaction to guard against race conditions.
@@ -94,10 +84,14 @@ class AuthController extends Controller
                             'email' => ['The email has already been taken in this family.'],
                         ]);
                     }
+
+                    $role = 'member';
                 } else {
                     $family = Family::create([
                         'name' => $data['family_name'] ?? $data['name']."'s Family",
                     ]);
+
+                    $role = 'owner';
                 }
 
                 return User::create([
@@ -105,6 +99,7 @@ class AuthController extends Controller
                     'name' => $data['name'],
                     'email' => $data['email'],
                     'password' => $data['password'], // hashed by the model cast
+                    'role' => $role,
                 ]);
             });
 
@@ -286,49 +281,58 @@ class AuthController extends Controller
             $email = strtolower(trim($data['email']));
             $expires = (int) config('auth.passwords.users.expire', 15);
 
-            $record = DB::table('password_reset_tokens')->where('email', $email)->first();
+            $result = DB::transaction(function () use ($email, $data, $expires) {
+                $record = DB::table('password_reset_tokens')
+                    ->where('email', $email)
+                    ->lockForUpdate()
+                    ->first();
 
-            if (! $record) {
-                return $this->errorResponse('Invalid or expired password reset code.', 400);
-            }
+                if (! $record) {
+                    return $this->errorResponse('Invalid or expired password reset code.', 400);
+                }
 
-            $isExpired = Carbon::parse($record->created_at)->addMinutes($expires)->isPast();
-            if ($isExpired) {
+                $isExpired = Carbon::parse($record->created_at)->addMinutes($expires)->isPast();
+                if ($isExpired) {
+                    DB::table('password_reset_tokens')->where('email', $email)->delete();
+
+                    return $this->errorResponse('Invalid or expired password reset code.', 400);
+                }
+
+                if ((int) $record->attempts >= 5) {
+                    DB::table('password_reset_tokens')->where('email', $email)->delete();
+
+                    return $this->errorResponse('Too many failed attempts. Please request a new password reset code.', 429);
+                }
+
+                if (! Hash::check($data['code'], $record->token)) {
+                    DB::table('password_reset_tokens')->where('email', $email)->increment('attempts');
+
+                    return $this->errorResponse('Invalid or expired password reset code.', 400);
+                }
+
+                $users = User::where('email', $email)->get();
+
+                if ($users->isEmpty()) {
+                    DB::table('password_reset_tokens')->where('email', $email)->delete();
+
+                    return $this->errorResponse('Invalid or expired password reset code.', 400);
+                }
+
+                // Consume token atomically inside transaction before modifying users
                 DB::table('password_reset_tokens')->where('email', $email)->delete();
 
-                return $this->errorResponse('Invalid or expired password reset code.', 400);
-            }
-
-            if ((int) $record->attempts >= 5) {
-                DB::table('password_reset_tokens')->where('email', $email)->delete();
-
-                return $this->errorResponse('Too many failed attempts. Please request a new password reset code.', 429);
-            }
-
-            if (! Hash::check($data['code'], $record->token)) {
-                DB::table('password_reset_tokens')->where('email', $email)->increment('attempts');
-
-                return $this->errorResponse('Invalid or expired password reset code.', 400);
-            }
-
-            $users = User::where('email', $email)->get();
-
-            if ($users->isEmpty()) {
-                DB::table('password_reset_tokens')->where('email', $email)->delete();
-
-                return $this->errorResponse('Invalid or expired password reset code.', 400);
-            }
-
-            // All-or-nothing: apply to all user accounts sharing email and revoke sessions
-            DB::transaction(function () use ($users, $data, $email) {
                 foreach ($users as $user) {
                     $user->forceFill(['password' => $data['password']])->save();
                     $user->tokens()->delete(); // log out from all devices
                     event(new PasswordReset($user));
                 }
 
-                DB::table('password_reset_tokens')->where('email', $email)->delete();
+                return null;
             });
+
+            if ($result instanceof JsonResponse) {
+                return $result;
+            }
 
             return $this->successResponse(null, 'Password has been reset successfully.');
         } catch (Throwable $e) {

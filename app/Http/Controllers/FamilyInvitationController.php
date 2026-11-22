@@ -14,6 +14,7 @@ class FamilyInvitationController extends Controller
 {
     /**
      * Display a listing of invitations for the active family.
+     * Only family owners can manage invitations.
      */
     public function index(Request $request): JsonResponse
     {
@@ -22,6 +23,10 @@ class FamilyInvitationController extends Controller
 
             if (! $familyId) {
                 return $this->errorResponse('Family context is required.', 400);
+            }
+
+            if (! $request->user()->isOwner()) {
+                return $this->errorResponse('Only family owners can manage invitations.', 403);
             }
 
             $invitations = FamilyInvitation::with('inviter')
@@ -39,6 +44,7 @@ class FamilyInvitationController extends Controller
 
     /**
      * Create a new secure, high-entropy invitation for the family.
+     * Only family owners can manage invitations.
      */
     public function store(Request $request): JsonResponse
     {
@@ -47,6 +53,10 @@ class FamilyInvitationController extends Controller
 
             if (! $familyId) {
                 return $this->errorResponse('Family context is required.', 400);
+            }
+
+            if (! $request->user()->isOwner()) {
+                return $this->errorResponse('Only family owners can manage invitations.', 403);
             }
 
             $validator = Validator::make($request->all(), [
@@ -77,6 +87,7 @@ class FamilyInvitationController extends Controller
 
     /**
      * Delete an active invitation.
+     * Only family owners can manage invitations.
      */
     public function destroy(Request $request, int|string $id): JsonResponse
     {
@@ -85,6 +96,10 @@ class FamilyInvitationController extends Controller
 
             if (! $familyId) {
                 return $this->errorResponse('Family context is required.', 400);
+            }
+
+            if (! $request->user()->isOwner()) {
+                return $this->errorResponse('Only family owners can manage invitations.', 403);
             }
 
             $invitation = FamilyInvitation::where('family_id', $familyId)->find($id);
@@ -105,6 +120,7 @@ class FamilyInvitationController extends Controller
 
     /**
      * Regenerate an invitation code and refresh its expiration.
+     * Only family owners can manage invitations.
      */
     public function regenerate(Request $request, int|string $id): JsonResponse
     {
@@ -113,6 +129,10 @@ class FamilyInvitationController extends Controller
 
             if (! $familyId) {
                 return $this->errorResponse('Family context is required.', 400);
+            }
+
+            if (! $request->user()->isOwner()) {
+                return $this->errorResponse('Only family owners can manage invitations.', 403);
             }
 
             $invitation = FamilyInvitation::where('family_id', $familyId)->find($id);

@@ -37,6 +37,7 @@ class AuthSecurityTest extends TestCase
             'name' => 'Alice Admin',
             'email' => 'alice.security@example.com',
             'password' => 'SecurePass123!',
+            'role' => 'owner',
         ]);
 
         $this->token = $this->user->createToken('auth-token')->plainTextToken;
@@ -428,5 +429,58 @@ class AuthSecurityTest extends TestCase
 
         $regRes->assertStatus(422)
             ->assertJsonValidationErrors(['invite_code']);
+    }
+
+    public function test_only_family_owner_can_manage_invitations(): void
+    {
+        $regularMember = User::create([
+            'family_id' => $this->family->id,
+            'name' => 'Regular Member',
+            'email' => 'regular@example.com',
+            'password' => 'Password123!',
+            'role' => 'member',
+        ]);
+        $memberToken = $regularMember->createToken('member-token')->plainTextToken;
+
+        // Attempt to create invitation as regular member -> 403
+        $createRes = $this->withHeader('Authorization', "Bearer {$memberToken}")
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson('/api/family/invitations');
+
+        $createRes->assertStatus(403);
+
+        // Attempt to list invitations as regular member -> 403
+        $listRes = $this->withHeader('Authorization', "Bearer {$memberToken}")
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->getJson('/api/family/invitations');
+
+        $listRes->assertStatus(403);
+    }
+
+    public function test_invited_member_can_immediately_access_family_resources(): void
+    {
+        $invite = FamilyInvitation::create([
+            'family_id' => $this->family->id,
+            'invited_by_user_id' => $this->user->id,
+            'code' => 'inv_immediate_access_test',
+        ]);
+
+        $regRes = $this->postJson('/api/register', [
+            'name' => 'Immediate Member',
+            'email' => 'immediate@example.com',
+            'password' => 'Password123!',
+            'password_confirmation' => 'Password123!',
+            'invite_code' => $invite->code,
+        ]);
+
+        $regRes->assertStatus(201);
+        $token = $regRes->json('data.access_token');
+
+        auth()->forgetGuards();
+        $accessRes = $this->withToken($token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->getJson('/api/dashboard');
+
+        $accessRes->assertStatus(200);
     }
 }
