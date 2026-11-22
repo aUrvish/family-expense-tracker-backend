@@ -13,7 +13,6 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class TrashController extends Controller
@@ -145,9 +144,7 @@ class TrashController extends Controller
                 'recurring_transactions' => $recurring,
             ], 'Trash items retrieved successfully.');
         } catch (Throwable $e) {
-            Log::error('Fetch trash failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Fetch trash failed');
         }
     }
 
@@ -227,9 +224,7 @@ class TrashController extends Controller
 
             return $this->successResponse(null, 'Trash permanently emptied successfully.');
         } catch (Throwable $e) {
-            Log::error('Empty trash failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Empty trash failed');
         }
     }
 }

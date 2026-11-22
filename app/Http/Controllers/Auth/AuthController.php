@@ -107,12 +107,8 @@ class AuthController extends Controller
                 'access_token' => $user->createToken('auth_token')->plainTextToken,
                 'user' => $user->load('family'),
             ], 'User registered successfully.', 201);
-        } catch (ValidationException $e) {
-            return $this->errorResponse('Validation failed.', 422, $e->errors());
         } catch (Throwable $e) {
-            Log::error('Register failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Register failed');
         }
     }
 
@@ -156,9 +152,7 @@ class AuthController extends Controller
                 'families' => $user->families,
             ], 'Login successful.');
         } catch (Throwable $e) {
-            Log::error('Login failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Login failed');
         }
     }
 
@@ -178,9 +172,7 @@ class AuthController extends Controller
                 'families' => $user->families,
             ], 'User profile fetched successfully.');
         } catch (Throwable $e) {
-            Log::error('Fetch user failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Fetch user failed');
         }
     }
 
@@ -199,9 +191,7 @@ class AuthController extends Controller
 
             return $this->successResponse(null, 'Logged out successfully.');
         } catch (Throwable $e) {
-            Log::error('Logout failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Logout failed');
         }
     }
 
@@ -248,9 +238,7 @@ class AuthController extends Controller
 
             return $this->successResponse(null, $genericMessage);
         } catch (Throwable $e) {
-            Log::error('Forgot password failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Forgot password failed');
         }
     }
 
@@ -336,9 +324,7 @@ class AuthController extends Controller
 
             return $this->successResponse(null, 'Password has been reset successfully.');
         } catch (Throwable $e) {
-            Log::error('Reset password failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Reset password failed');
         }
     }
 
@@ -382,9 +368,7 @@ class AuthController extends Controller
 
             return $this->successResponse(null, 'Password changed successfully. Other active sessions have been revoked.');
         } catch (Throwable $e) {
-            Log::error('Change password failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Change password failed');
         }
     }
 }

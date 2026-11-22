@@ -11,7 +11,6 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Throwable;
@@ -82,9 +81,7 @@ class DebtController extends Controller
 
             return $this->successResponse($debts, 'Debts retrieved successfully.');
         } catch (Throwable $e) {
-            Log::error('Fetch debts failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Fetch debts failed');
         }
     }
 
@@ -237,9 +234,7 @@ class DebtController extends Controller
                 );
             });
         } catch (Throwable $e) {
-            Log::error('Save debt failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Save debt failed');
         }
     }
 
@@ -268,9 +263,7 @@ class DebtController extends Controller
 
             return $this->successResponse($this->formatDebt($debt), 'Debt record retrieved successfully.');
         } catch (Throwable $e) {
-            Log::error('Show debt failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Show debt failed');
         }
     }
 
@@ -397,9 +390,7 @@ class DebtController extends Controller
                 );
             });
         } catch (Throwable $e) {
-            Log::error('Settle debt failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Settle debt failed');
         }
     }
 
@@ -447,9 +438,7 @@ class DebtController extends Controller
 
             return $this->successResponse(null, ucfirst($debt->type).' record deleted successfully.');
         } catch (Throwable $e) {
-            Log::error('Delete debt failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Delete debt failed');
         }
     }
 
@@ -490,9 +479,7 @@ class DebtController extends Controller
 
             return $this->successResponse(null, 'Debt restored successfully.');
         } catch (Throwable $e) {
-            Log::error('Restore debt failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Restore debt failed');
         }
     }
 

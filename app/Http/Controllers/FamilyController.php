@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class FamilyController extends Controller
@@ -35,9 +34,7 @@ class FamilyController extends Controller
 
             return $this->successResponse($members, 'Family members retrieved successfully.');
         } catch (Throwable $e) {
-            Log::error('Fetch family members failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Fetch family members failed');
         }
     }
 
@@ -68,9 +65,7 @@ class FamilyController extends Controller
 
             return $this->successResponse($data, 'Family member profile retrieved successfully.');
         } catch (Throwable $e) {
-            Log::error('Fetch family member profile failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Fetch family member profile failed');
         }
     }
 }

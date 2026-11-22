@@ -8,7 +8,6 @@ use App\Services\CurrencyService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Throwable;
@@ -134,9 +133,7 @@ class BudgetController extends Controller
 
             return $this->successResponse($data, 'Budgets retrieved successfully.');
         } catch (Throwable $e) {
-            Log::error('Fetch budgets failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Fetch budgets failed');
         }
     }
 
@@ -228,9 +225,7 @@ class BudgetController extends Controller
                 201
             );
         } catch (Throwable $e) {
-            Log::error('Save budget failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Save budget failed');
         }
     }
 
@@ -256,9 +251,7 @@ class BudgetController extends Controller
 
             return $this->successResponse(null, 'Budget deleted successfully.');
         } catch (Throwable $e) {
-            Log::error('Delete budget failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Delete budget failed');
         }
     }
 
@@ -284,9 +277,7 @@ class BudgetController extends Controller
 
             return $this->successResponse(null, 'Budget restored successfully.');
         } catch (Throwable $e) {
-            Log::error('Restore budget failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Restore budget failed');
         }
     }
 }

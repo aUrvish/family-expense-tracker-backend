@@ -6,7 +6,6 @@ use App\Models\FamilyInvitation;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Throwable;
 
@@ -36,9 +35,7 @@ class FamilyInvitationController extends Controller
 
             return $this->successResponse($invitations, 'Family invitations retrieved successfully.');
         } catch (Throwable $e) {
-            Log::error('Fetch invitations failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Fetch invitations failed');
         }
     }
 
@@ -79,9 +76,7 @@ class FamilyInvitationController extends Controller
 
             return $this->successResponse($invitation, 'Invitation created successfully.', 201);
         } catch (Throwable $e) {
-            Log::error('Create invitation failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Create invitation failed');
         }
     }
 
@@ -112,9 +107,7 @@ class FamilyInvitationController extends Controller
 
             return $this->successResponse(null, 'Invitation deleted successfully.');
         } catch (Throwable $e) {
-            Log::error('Delete invitation failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Delete invitation failed');
         }
     }
 
@@ -149,9 +142,7 @@ class FamilyInvitationController extends Controller
 
             return $this->successResponse($invitation, 'Invitation regenerated successfully.');
         } catch (Throwable $e) {
-            Log::error('Regenerate invitation failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Regenerate invitation failed');
         }
     }
 }

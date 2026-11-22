@@ -8,7 +8,6 @@ use App\Services\CurrencyService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Throwable;
@@ -60,9 +59,7 @@ class RecurringTransactionController extends Controller
 
             return $this->successResponse($recurring, 'Recurring transactions retrieved successfully.');
         } catch (Throwable $e) {
-            Log::error('Fetch recurring transactions failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Fetch recurring transactions failed');
         }
     }
 
@@ -218,9 +215,7 @@ class RecurringTransactionController extends Controller
                 201
             );
         } catch (Throwable $e) {
-            Log::error('Save recurring transaction failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Save recurring transaction failed');
         }
     }
 
@@ -252,9 +247,7 @@ class RecurringTransactionController extends Controller
                 'Recurring transaction retrieved successfully.'
             );
         } catch (Throwable $e) {
-            Log::error('Show recurring transaction failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Show recurring transaction failed');
         }
     }
 
@@ -286,9 +279,7 @@ class RecurringTransactionController extends Controller
 
             return $this->successResponse(null, 'Recurring transaction deleted successfully.');
         } catch (Throwable $e) {
-            Log::error('Delete recurring transaction failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Delete recurring transaction failed');
         }
     }
 
@@ -320,9 +311,7 @@ class RecurringTransactionController extends Controller
 
             return $this->successResponse(null, 'Recurring transaction restored successfully.');
         } catch (Throwable $e) {
-            Log::error('Restore recurring transaction failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Restore recurring transaction failed');
         }
     }
 
