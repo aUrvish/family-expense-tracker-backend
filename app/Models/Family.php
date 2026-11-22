@@ -91,4 +91,14 @@ class Family extends Tenant
     {
         return $this->hasMany(Budget::class);
     }
+
+    /**
+     * Get the invitations for this family.
+     *
+     * @return HasMany<FamilyInvitation, $this>
+     */
+    public function invitations(): HasMany
+    {
+        return $this->hasMany(FamilyInvitation::class);
+    }
 }

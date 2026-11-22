@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Http\Middleware\IdentifyFamily;
 use App\Mail\ResetPasswordCodeMail;
 use App\Models\Family;
+use App\Models\FamilyInvitation;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
@@ -89,6 +90,11 @@ class AuthTest extends TestCase
             'name' => 'Existing Family',
         ]);
 
+        $invitation = FamilyInvitation::create([
+            'family_id' => $existingFamily->id,
+            'code' => 'inv_test_valid_code_123',
+        ]);
+
         $this->assertDatabaseCount('families', 1);
 
         $payload = [
@@ -96,7 +102,7 @@ class AuthTest extends TestCase
             'email' => 'member@example.com',
             'password' => 'password123',
             'password_confirmation' => 'password123',
-            'invite_code' => $existingFamily->id,
+            'invite_code' => $invitation->code,
         ];
 
         $response = $this->postJson('/api/register', $payload);
@@ -298,7 +304,7 @@ class AuthTest extends TestCase
         $response->assertStatus(200)
             ->assertJson([
                 'status' => true,
-                'message' => 'Password reset code sent successfully.',
+                'message' => 'If an account with that email exists, a password reset code has been sent.',
             ]);
 
         $this->assertDatabaseHas('password_reset_tokens', [
@@ -307,16 +313,15 @@ class AuthTest extends TestCase
 
         $record = DB::table('password_reset_tokens')->where('email', 'alice@example.com')->first();
         $this->assertNotNull($record);
-        $this->assertEquals(6, strlen($record->token));
 
         Mail::assertSent(ResetPasswordCodeMail::class, function (ResetPasswordCodeMail $mail) use ($record) {
-            return $mail->hasTo('alice@example.com') && $mail->code === $record->token;
+            return $mail->hasTo('alice@example.com') && Hash::check($mail->code, $record->token);
         });
     }
 
     public function test_reset_password_code_mail_renders_markdown_template(): void
     {
-        $mailable = new ResetPasswordCodeMail('654321', 60);
+        $mailable = new ResetPasswordCodeMail('654321', 15);
 
         $mailable->assertSeeInHtml('654321');
         $mailable->assertSeeInHtml('Password Reset Code');
@@ -325,15 +330,23 @@ class AuthTest extends TestCase
 
     public function test_cannot_request_password_reset_code_for_non_existent_email(): void
     {
+        Mail::fake();
+
         $response = $this->postJson('/api/forgot-password', [
             'email' => 'unknown@example.com',
         ]);
 
-        $response->assertStatus(400)
+        // Returns generic 200 response to prevent account enumeration
+        $response->assertStatus(200)
             ->assertJson([
-                'status' => false,
-                'message' => "We can't find a user with that email address.",
+                'status' => true,
+                'message' => 'If an account with that email exists, a password reset code has been sent.',
             ]);
+
+        Mail::assertNothingSent();
+        $this->assertDatabaseMissing('password_reset_tokens', [
+            'email' => 'unknown@example.com',
+        ]);
     }
 
     public function test_same_email_can_register_in_different_families(): void
@@ -341,12 +354,22 @@ class AuthTest extends TestCase
         $familyA = Family::create(['name' => 'Family A']);
         $familyB = Family::create(['name' => 'Family B']);
 
+        $inviteA = FamilyInvitation::create([
+            'family_id' => $familyA->id,
+            'code' => 'inv_test_family_a_code',
+        ]);
+
+        $inviteB = FamilyInvitation::create([
+            'family_id' => $familyB->id,
+            'code' => 'inv_test_family_b_code',
+        ]);
+
         $responseA = $this->postJson('/api/register', [
             'name' => 'Shared Email User A',
             'email' => 'shared@example.com',
             'password' => 'password123',
             'password_confirmation' => 'password123',
-            'invite_code' => $familyA->id,
+            'invite_code' => $inviteA->code,
         ]);
 
         $responseA->assertStatus(201);
@@ -356,7 +379,7 @@ class AuthTest extends TestCase
             'email' => 'shared@example.com',
             'password' => 'password456',
             'password_confirmation' => 'password456',
-            'invite_code' => $familyB->id,
+            'invite_code' => $inviteB->code,
         ]);
 
         $responseB->assertStatus(201);
@@ -367,6 +390,11 @@ class AuthTest extends TestCase
     public function test_same_email_cannot_register_twice_in_same_family(): void
     {
         $family = Family::create(['name' => 'Only One Family']);
+
+        $invite = FamilyInvitation::create([
+            'family_id' => $family->id,
+            'code' => 'inv_test_only_one_family',
+        ]);
 
         User::create([
             'family_id' => $family->id,
@@ -380,7 +408,7 @@ class AuthTest extends TestCase
             'email' => 'duplicate@example.com',
             'password' => 'password123',
             'password_confirmation' => 'password123',
-            'invite_code' => $family->id,
+            'invite_code' => $invite->code,
         ]);
 
         $response->assertStatus(422)
@@ -398,11 +426,13 @@ class AuthTest extends TestCase
 
         DB::table('password_reset_tokens')->insert([
             'email' => 'alice@example.com',
-            'token' => '123456',
+            'token' => Hash::make('123456'),
+            'attempts' => 0,
             'created_at' => now(),
         ]);
 
         $response = $this->postJson('/api/reset-password', [
+            'email' => 'alice@example.com',
             'code' => '123456',
             'password' => 'newpassword123',
             'password_confirmation' => 'newpassword123',
@@ -430,7 +460,15 @@ class AuthTest extends TestCase
             'password' => 'oldpassword123',
         ]);
 
+        DB::table('password_reset_tokens')->insert([
+            'email' => 'alice@example.com',
+            'token' => Hash::make('123456'),
+            'attempts' => 0,
+            'created_at' => now(),
+        ]);
+
         $response = $this->postJson('/api/reset-password', [
+            'email' => 'alice@example.com',
             'code' => '999999',
             'password' => 'newpassword123',
             'password_confirmation' => 'newpassword123',
@@ -441,6 +479,11 @@ class AuthTest extends TestCase
                 'status' => false,
                 'message' => 'Invalid or expired password reset code.',
             ]);
+
+        $this->assertDatabaseHas('password_reset_tokens', [
+            'email' => 'alice@example.com',
+            'attempts' => 1,
+        ]);
     }
 
     public function test_user_cannot_reset_password_with_expired_code(): void
@@ -453,11 +496,13 @@ class AuthTest extends TestCase
 
         DB::table('password_reset_tokens')->insert([
             'email' => 'alice@example.com',
-            'token' => '123456',
-            'created_at' => now()->subMinutes(61),
+            'token' => Hash::make('123456'),
+            'attempts' => 0,
+            'created_at' => now()->subMinutes(16),
         ]);
 
         $response = $this->postJson('/api/reset-password', [
+            'email' => 'alice@example.com',
             'code' => '123456',
             'password' => 'newpassword123',
             'password_confirmation' => 'newpassword123',
