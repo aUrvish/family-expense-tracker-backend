@@ -102,7 +102,7 @@ abstract class Controller
             return $this->errorResponse('Resource not found.', 404, null, $headers);
         }
 
-        if ($e instanceof HttpExceptionInterface) {
+        if ($e instanceof HttpExceptionInterface && $e->getStatusCode() < 500) {
             $status = $e->getStatusCode();
 
             return $this->errorResponse(
@@ -113,12 +113,15 @@ abstract class Controller
             );
         }
 
+        $status = $e instanceof HttpExceptionInterface ? $e->getStatusCode() : 500;
+        $headers = $e instanceof HttpExceptionInterface ? $e->getHeaders() : [];
+
         Log::error($logMessage.': '.$e->getMessage(), [
             'exception' => $e::class,
             'file' => $e->getFile(),
             'line' => $e->getLine(),
         ]);
 
-        return $this->errorResponse();
+        return $this->errorResponse('Internal Server Error', $status, null, $headers);
     }
 }

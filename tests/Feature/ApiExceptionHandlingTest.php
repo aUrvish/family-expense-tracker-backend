@@ -256,4 +256,74 @@ class ApiExceptionHandlingTest extends TestCase
                     && $context['exception'] === \RuntimeException::class;
             });
     }
+
+    public function test_500_http_exception_is_logged_and_internal_message_is_not_exposed(): void
+    {
+        Log::spy();
+
+        $testController = new class extends Controller
+        {
+            public function fail(): JsonResponse
+            {
+                try {
+                    throw new HttpException(500, 'Upstream payment gateway connection timeout on 192.168.1.50');
+                } catch (\Throwable $e) {
+                    return $this->handleException($e, 'Upstream gateway error');
+                }
+            }
+        };
+
+        $response = $testController->fail();
+
+        $this->assertSame(500, $response->getStatusCode());
+        $data = $response->getData(true);
+        $this->assertFalse($data['status']);
+        $this->assertSame('Internal Server Error', $data['message']);
+        $this->assertStringNotContainsString('192.168.1.50', json_encode($data));
+        $this->assertStringNotContainsString('gateway connection timeout', json_encode($data));
+
+        Log::shouldHaveReceived('error')
+            ->once()
+            ->withArgs(function ($message, $context) {
+                return str_contains($message, 'Upstream gateway error')
+                    && str_contains($message, '192.168.1.50')
+                    && isset($context['exception'])
+                    && $context['exception'] === HttpException::class;
+            });
+    }
+
+    public function test_503_http_exception_is_logged_preserves_headers_and_does_not_leak_message(): void
+    {
+        Log::spy();
+
+        $testController = new class extends Controller
+        {
+            public function fail(): JsonResponse
+            {
+                try {
+                    throw new HttpException(503, 'Database maintenance underway on server-db-prod-01', null, ['Retry-After' => '120']);
+                } catch (\Throwable $e) {
+                    return $this->handleException($e, 'Maintenance mode');
+                }
+            }
+        };
+
+        $response = $testController->fail();
+
+        $this->assertSame(503, $response->getStatusCode());
+        $this->assertSame('120', $response->headers->get('Retry-After'));
+        $data = $response->getData(true);
+        $this->assertFalse($data['status']);
+        $this->assertSame('Internal Server Error', $data['message']);
+        $this->assertStringNotContainsString('server-db-prod-01', json_encode($data));
+
+        Log::shouldHaveReceived('error')
+            ->once()
+            ->withArgs(function ($message, $context) {
+                return str_contains($message, 'Maintenance mode')
+                    && str_contains($message, 'server-db-prod-01')
+                    && isset($context['exception'])
+                    && $context['exception'] === HttpException::class;
+            });
+    }
 }
