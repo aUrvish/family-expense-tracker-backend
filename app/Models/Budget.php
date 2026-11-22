@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * @property int $id
@@ -16,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $year
  * @property int|string|null $created_at
  * @property int|string|null $updated_at
+ * @property int|string|null $deleted_at
  */
 #[Fillable([
     'family_id',
@@ -26,7 +28,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 ])]
 class Budget extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     /**
      * Get the attributes that should be cast.
@@ -41,6 +43,7 @@ class Budget extends Model
             'year' => 'integer',
             'created_at' => 'timestamp',
             'updated_at' => 'timestamp',
+            'deleted_at' => 'timestamp',
         ];
     }
 

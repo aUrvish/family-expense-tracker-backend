@@ -1,0 +1,457 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\Category;
+use App\Models\Debt;
+use App\Models\DebtSettlement;
+use App\Models\Family;
+use App\Models\RecurringTransaction;
+use App\Models\Transaction;
+use App\Models\User;
+use Carbon\Carbon;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+class FamilyFinanceEnhancementsTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected Family $family;
+
+    protected User $user;
+
+    protected string $token;
+
+    protected Category $category;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->family = Family::create([
+            'name' => 'Smith Family',
+            'currency' => 'USD',
+        ]);
+
+        $this->user = User::factory()->create([
+            'family_id' => $this->family->id,
+            'name' => 'Alice Smith',
+            'email' => 'alice@example.com',
+        ]);
+
+        $this->token = $this->user->createToken('test-token')->plainTextToken;
+
+        $this->category = Category::create([
+            'name' => 'General',
+            'slug' => 'general',
+            'color' => '#10B981',
+        ]);
+
+        Category::create([
+            'name' => 'Others',
+            'slug' => 'others',
+            'color' => '#6B7280',
+        ]);
+    }
+
+    public function test_debt_partial_settlement_creates_settlement_records_and_updates_remaining_balance(): void
+    {
+        // 1. Create debt of $100.00
+        $createResponse = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson('/api/debt/save', [
+                'person_name' => 'Bob',
+                'type' => 'lent',
+                'amount' => 100.00,
+                'date' => '2026-11-20',
+                'category_id' => $this->category->id,
+            ]);
+
+        $createResponse->assertStatus(201)
+            ->assertJsonPath('data.amount', '100.00')
+            ->assertJsonPath('data.settled_amount', 0)
+            ->assertJsonPath('data.remaining_amount', 100)
+            ->assertJsonPath('data.status', 'pending');
+
+        $debtId = $createResponse->json('data.id');
+
+        // 2. Partial settlement of $40.00
+        $settlePartialResponse = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson("/api/debt/{$debtId}/settle", [
+                'amount' => 40.00,
+                'note' => 'First partial repayment',
+            ]);
+
+        $settlePartialResponse->assertStatus(200)
+            ->assertJsonPath('data.status', 'partially_settled')
+            ->assertJsonPath('data.settled_amount', 40)
+            ->assertJsonPath('data.remaining_amount', 60);
+
+        $this->assertDatabaseHas('debt_settlements', [
+            'debt_id' => $debtId,
+            'amount' => '40.00',
+            'note' => 'First partial repayment',
+        ]);
+
+        // Income transaction generated for lent repayment
+        $this->assertDatabaseHas('transactions', [
+            'family_id' => $this->family->id,
+            'type' => 'income',
+            'amount' => '40.00',
+        ]);
+
+        // 3. Validation: attempting to settle more than remaining ($65 > $60) fails
+        $overSettleResponse = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson("/api/debt/{$debtId}/settle", [
+                'amount' => 65.00,
+            ]);
+
+        $overSettleResponse->assertStatus(422);
+
+        // 4. Settle remaining balance without specifying amount (defaults to remaining $60)
+        $settleFullResponse = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson("/api/debt/{$debtId}/settle");
+
+        $settleFullResponse->assertStatus(200)
+            ->assertJsonPath('data.status', 'settled')
+            ->assertJsonPath('data.settled_amount', 100)
+            ->assertJsonPath('data.remaining_amount', 0);
+
+        $this->assertCount(2, DebtSettlement::where('debt_id', $debtId)->get());
+    }
+
+    public function test_family_custom_categories_crud_and_tenant_isolation(): void
+    {
+        $otherFamily = Family::create([
+            'name' => 'Johnson Family',
+            'currency' => 'USD',
+        ]);
+
+        // 1. Create family custom category
+        $createResponse = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson('/api/category/save', [
+                'name' => 'Vacation & Trips',
+                'icon' => 'plane',
+                'color' => '#3B82F6',
+            ]);
+
+        $createResponse->assertStatus(201)
+            ->assertJsonPath('data.name', 'Vacation & Trips')
+            ->assertJsonPath('data.is_system', false);
+
+        $customCategoryId = $createResponse->json('data.id');
+
+        // 2. Listing categories for this family includes system + custom category
+        $listResponse = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->getJson('/api/category');
+
+        $listResponse->assertStatus(200)
+            ->assertJsonFragment(['name' => 'Vacation & Trips'])
+            ->assertJsonFragment(['name' => 'General']);
+
+        // 3. Other family does NOT see this custom category
+        $otherUser = User::factory()->create([
+            'family_id' => $otherFamily->id,
+            'email' => 'johnson@example.com',
+        ]);
+        $otherToken = $otherUser->createToken('token-b')->plainTextToken;
+
+        auth()->forgetGuards();
+
+        $otherListResponse = $this->withToken($otherToken)
+            ->withHeader('X-Family-Id', $otherFamily->id)
+            ->getJson('/api/category');
+
+        $otherListResponse->assertStatus(200)
+            ->assertJsonMissing(['name' => 'Vacation & Trips'])
+            ->assertJsonFragment(['name' => 'General']);
+
+        auth()->forgetGuards();
+
+        // 4. System categories cannot be deleted or modified by families
+        $systemCategory = Category::where('slug', 'general')->first();
+
+        $deleteSystemResponse = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->deleteJson("/api/category/{$systemCategory->id}");
+
+        $deleteSystemResponse->assertStatus(403);
+
+        // 5. Update custom category
+        $updateResponse = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson('/api/category/save', [
+                'id' => $customCategoryId,
+                'name' => 'Vacation Trips Updated',
+                'color' => '#2563EB',
+            ]);
+
+        $updateResponse->assertStatus(200)
+            ->assertJsonPath('data.name', 'Vacation Trips Updated');
+
+        // 6. Delete custom category (soft delete)
+        $deleteCustomResponse = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->deleteJson("/api/category/{$customCategoryId}");
+
+        $deleteCustomResponse->assertStatus(200);
+
+        $this->assertSoftDeleted('categories', ['id' => $customCategoryId]);
+
+        // 7. Restore custom category
+        $restoreResponse = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson("/api/category/{$customCategoryId}/restore");
+
+        $restoreResponse->assertStatus(200);
+
+        $this->assertNotSoftDeleted('categories', ['id' => $customCategoryId]);
+    }
+
+    public function test_recurring_transactions_crud_and_duplicate_prevention_processor(): void
+    {
+        $today = now()->toDateString();
+
+        // 1. Create recurring monthly subscription
+        $createResponse = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson('/api/recurring-transaction/save', [
+                'category_id' => $this->category->id,
+                'type' => 'expense',
+                'amount' => 19.99,
+                'frequency' => 'monthly',
+                'interval' => 1,
+                'start_date' => $today,
+                'note' => 'Cloud Storage Plan',
+                'visibility' => 'shared',
+            ]);
+
+        $createResponse->assertStatus(201)
+            ->assertJsonPath('data.amount', '19.99')
+            ->assertJsonPath('data.frequency', 'monthly')
+            ->assertJsonPath('data.status', 'active');
+
+        $recurringId = $createResponse->json('data.id');
+
+        // 2. Process recurring transactions command
+        $this->artisan('recurring:process')
+            ->assertSuccessful();
+
+        // One transaction created for today
+        $this->assertDatabaseHas('transactions', [
+            'recurring_transaction_id' => $recurringId,
+            'amount' => '19.99',
+            'date' => $today,
+        ]);
+
+        $recurring = RecurringTransaction::find($recurringId);
+        $expectedNextDue = Carbon::parse($today)->addMonthNoOverflow()->toDateString();
+        $this->assertSame($expectedNextDue, Carbon::parse($recurring->next_due_date)->toDateString());
+
+        // 3. Safe Duplicate Prevention: Running the command again does NOT create duplicate for same cycle
+        $this->artisan('recurring:process')
+            ->assertSuccessful();
+
+        $this->assertSame(1, Transaction::where('recurring_transaction_id', $recurringId)->count());
+
+        // 4. Update status (Pause and Resume via save)
+        $pauseResponse = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson('/api/recurring-transaction/save', [
+                'id' => $recurringId,
+                'status' => 'paused',
+            ]);
+
+        $pauseResponse->assertStatus(200)
+            ->assertJsonPath('data.status', 'paused');
+
+        $resumeResponse = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson('/api/recurring-transaction/save', [
+                'id' => $recurringId,
+                'status' => 'active',
+            ]);
+
+        $resumeResponse->assertStatus(200)
+            ->assertJsonPath('data.status', 'active');
+
+        // 5. Listing recurring transactions via single endpoint GET /api/recurring-transaction
+        $listResponse = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->getJson('/api/recurring-transaction');
+
+        $listResponse->assertStatus(200)
+            ->assertJsonPath('data.data.0.id', $recurringId);
+    }
+
+    public function test_soft_delete_and_restore_with_trash_overview(): void
+    {
+        // 1. Create transaction
+        $txResponse = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson('/api/transaction/save', [
+                'category_id' => $this->category->id,
+                'type' => 'expense',
+                'amount' => 50.00,
+                'date' => '2026-11-20',
+                'note' => 'Test groceries',
+            ]);
+
+        $txId = $txResponse->json('data.id');
+
+        // 2. Delete transaction (soft delete)
+        $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->deleteJson("/api/transaction/{$txId}")
+            ->assertStatus(200);
+
+        $this->assertSoftDeleted('transactions', ['id' => $txId]);
+
+        // Excluded from standard index
+        $indexResponse = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->getJson('/api/transactions');
+
+        $indexResponse->assertStatus(200)
+            ->assertJsonMissing(['id' => $txId]);
+
+        // 3. Included in Trash overview
+        $trashResponse = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->getJson('/api/trash');
+
+        $trashResponse->assertStatus(200)
+            ->assertJsonFragment(['id' => $txId, 'note' => 'Test groceries']);
+
+        // 4. Restore transaction
+        $restoreResponse = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson("/api/transaction/{$txId}/restore");
+
+        $restoreResponse->assertStatus(200);
+
+        $this->assertNotSoftDeleted('transactions', ['id' => $txId]);
+
+        // 5. Debt soft-deletion also soft-deletes linked transactions and settlements
+        $debtResponse = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson('/api/debt/save', [
+                'person_name' => 'Charlie',
+                'type' => 'lent',
+                'amount' => 80.00,
+                'date' => '2026-11-20',
+                'category_id' => $this->category->id,
+            ]);
+
+        $debtId = $debtResponse->json('data.id');
+        $initialTxId = $debtResponse->json('data.transaction_id');
+
+        $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->deleteJson("/api/debt/{$debtId}")
+            ->assertStatus(200);
+
+        $this->assertSoftDeleted('debts', ['id' => $debtId]);
+        $this->assertSoftDeleted('transactions', ['id' => $initialTxId]);
+
+        // Restoring debt also restores linked initial transaction
+        $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson("/api/debt/{$debtId}/restore")
+            ->assertStatus(200);
+
+        $this->assertNotSoftDeleted('debts', ['id' => $debtId]);
+        $this->assertNotSoftDeleted('transactions', ['id' => $initialTxId]);
+    }
+
+    public function test_trash_list_strictly_respects_visibility_and_scope(): void
+    {
+        // Member 2 in the same family
+        $member2 = User::factory()->create([
+            'family_id' => $this->family->id,
+            'email' => 'member2@example.com',
+        ]);
+        $member2Token = $member2->createToken('member2')->plainTextToken;
+
+        // User 1 creates and deletes a personal transaction
+        $personalTx = Transaction::create([
+            'family_id' => $this->family->id,
+            'user_id' => $this->user->id,
+            'category_id' => $this->category->id,
+            'type' => 'expense',
+            'amount' => '25.00',
+            'date' => now()->toDateString(),
+            'note' => 'User 1 personal secret expense',
+            'visibility' => 'personal',
+        ]);
+        $personalTx->delete();
+
+        // User 1 creates and deletes a shared transaction
+        $sharedTx = Transaction::create([
+            'family_id' => $this->family->id,
+            'user_id' => $this->user->id,
+            'category_id' => $this->category->id,
+            'type' => 'expense',
+            'amount' => '50.00',
+            'date' => now()->toDateString(),
+            'note' => 'User 1 shared groceries',
+            'visibility' => 'shared',
+        ]);
+        $sharedTx->delete();
+
+        // 1. User 2 checks trash: User 2 sees the shared transaction, but NEVER sees User 1's personal transaction
+        $member2Trash = $this->withToken($member2Token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->getJson('/api/trash');
+
+        $member2Trash->assertStatus(200)
+            ->assertJsonFragment(['note' => 'User 1 shared groceries'])
+            ->assertJsonMissing(['note' => 'User 1 personal secret expense']);
+
+        auth()->forgetGuards();
+
+        // 2. User 1 checks trash: sees both shared and their own personal transaction
+        $user1Trash = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->getJson('/api/trash');
+
+        $user1Trash->assertStatus(200)
+            ->assertJsonFragment(['note' => 'User 1 shared groceries'])
+            ->assertJsonFragment(['note' => 'User 1 personal secret expense']);
+
+        // 3. User 1 filters trash by visibility=personal: only personal items returned, budgets/categories empty
+        $user1PersonalTrash = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->getJson('/api/trash?visibility=personal');
+
+        $user1PersonalTrash->assertStatus(200)
+            ->assertJsonFragment(['note' => 'User 1 personal secret expense'])
+            ->assertJsonMissing(['note' => 'User 1 shared groceries'])
+            ->assertJsonPath('data.budgets', [])
+            ->assertJsonPath('data.categories', []);
+
+        // 4. User 1 filters trash by visibility=shared: only shared items returned
+        $user1SharedTrash = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->getJson('/api/trash?visibility=shared');
+
+        $user1SharedTrash->assertStatus(200)
+            ->assertJsonFragment(['note' => 'User 1 shared groceries'])
+            ->assertJsonMissing(['note' => 'User 1 personal secret expense']);
+
+        // 5. User 2 cannot restore User 1's personal transaction
+        auth()->forgetGuards();
+        $restoreAttempt = $this->withToken($member2Token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson("/api/transaction/{$personalTx->id}/restore");
+
+        $restoreAttempt->assertStatus(404);
+        $this->assertSoftDeleted('transactions', ['id' => $personalTx->id]);
+    }
+}

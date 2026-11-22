@@ -251,6 +251,41 @@ class TransactionController extends Controller
     }
 
     /**
+     * Restore the specified soft-deleted transaction.
+     */
+    public function restore(Request $request, int|string $id): JsonResponse
+    {
+        try {
+            $familyId = tenant('id');
+
+            if (! $familyId) {
+                return $this->errorResponse('Family context is required.', 400);
+            }
+
+            $user = $request->user();
+
+            $transaction = Transaction::onlyTrashed()->where('family_id', $familyId)->find($id);
+
+            if (! $transaction) {
+                return $this->errorResponse('Transaction not found.', 404);
+            }
+
+            // Personal transactions can only be restored by their creator
+            if ($transaction->visibility === 'personal' && $transaction->user_id !== $user->id) {
+                return $this->errorResponse('Transaction not found.', 404);
+            }
+
+            $transaction->restore();
+
+            return $this->successResponse(null, ucfirst($transaction->type).' restored successfully.');
+        } catch (Throwable $e) {
+            Log::error('Restore transaction failed: '.$e->getMessage());
+
+            return $this->errorResponse();
+        }
+    }
+
+    /**
      * Format a transaction model into an array with currency display metadata.
      *
      * @return array<string, mixed>

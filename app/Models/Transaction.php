@@ -7,12 +7,14 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * @property int $id
  * @property string $family_id
  * @property int $user_id
  * @property int $category_id
+ * @property int|null $recurring_transaction_id
  * @property string $type 'expense' or 'income'
  * @property string $amount Decimal amount
  * @property int|string $date
@@ -21,11 +23,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $visibility 'shared' or 'personal'
  * @property int|string|null $created_at
  * @property int|string|null $updated_at
+ * @property int|string|null $deleted_at
  */
 #[Fillable([
     'family_id',
     'user_id',
     'category_id',
+    'recurring_transaction_id',
     'type',
     'amount',
     'date',
@@ -35,7 +39,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 ])]
 class Transaction extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     /**
      * Get the attributes that should be cast.
@@ -49,6 +53,7 @@ class Transaction extends Model
             'date' => 'timestamp',
             'created_at' => 'timestamp',
             'updated_at' => 'timestamp',
+            'deleted_at' => 'timestamp',
         ];
     }
 
@@ -74,6 +79,16 @@ class Transaction extends Model
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
+    }
+
+    /**
+     * Get the recurring transaction template that generated this transaction.
+     *
+     * @return BelongsTo<RecurringTransaction, $this>
+     */
+    public function recurringTransaction(): BelongsTo
+    {
+        return $this->belongsTo(RecurringTransaction::class);
     }
 
     /**

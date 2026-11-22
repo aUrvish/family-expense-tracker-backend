@@ -251,4 +251,32 @@ class BudgetController extends Controller
             return $this->errorResponse();
         }
     }
+
+    /**
+     * Restore a soft-deleted category budget.
+     */
+    public function restore(Request $request, int|string $id): JsonResponse
+    {
+        try {
+            $familyId = tenant('id');
+
+            if (! $familyId) {
+                return $this->errorResponse('Family context is required.', 400);
+            }
+
+            $budget = Budget::onlyTrashed()->where('family_id', $familyId)->find($id);
+
+            if (! $budget) {
+                return $this->errorResponse('Budget record not found.', 404);
+            }
+
+            $budget->restore();
+
+            return $this->successResponse(null, 'Budget restored successfully.');
+        } catch (Throwable $e) {
+            Log::error('Restore budget failed: '.$e->getMessage());
+
+            return $this->errorResponse();
+        }
+    }
 }

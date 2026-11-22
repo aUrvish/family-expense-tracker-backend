@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Category;
 use App\Models\Debt;
+use App\Models\DebtSettlement;
 use App\Models\Transaction;
 use App\Services\CurrencyService;
 use Carbon\Carbon;
@@ -34,15 +35,15 @@ class DebtController extends Controller
             $query = Debt::query()
                 ->where('family_id', $familyId)
                 ->visibleTo($user)
-                ->with(['user', 'transaction', 'settlementTransaction']);
+                ->with(['user', 'transaction', 'settlementTransaction', 'settlements.transaction']);
 
             // Filter by type ('lent' or 'borrowed')
             if ($request->filled('type') && in_array($request->input('type'), ['lent', 'borrowed'])) {
                 $query->where('type', $request->input('type'));
             }
 
-            // Filter by status ('pending' or 'settled')
-            if ($request->filled('status') && in_array($request->input('status'), ['pending', 'settled'])) {
+            // Filter by status ('pending', 'partially_settled', 'settled')
+            if ($request->filled('status') && in_array($request->input('status'), ['pending', 'partially_settled', 'settled'])) {
                 $query->where('status', $request->input('status'));
             }
 
@@ -289,42 +290,88 @@ class DebtController extends Controller
 
             if ($debt->status === 'settled') {
                 return $this->successResponse(
-                    $this->formatDebt($debt->load(['user', 'transaction', 'settlementTransaction'])),
+                    $this->formatDebt($debt->load(['user', 'transaction', 'settlementTransaction', 'settlements.transaction'])),
                     'Debt record is already settled.'
                 );
             }
 
-            return DB::transaction(function () use ($debt, $familyId, $user) {
+            $validator = Validator::make($request->all(), [
+                'amount' => 'nullable|numeric|min:0.01',
+                'date' => 'nullable|date',
+                'note' => 'nullable|string|max:255',
+            ]);
+
+            if ($validator->fails()) {
+                return $this->errorResponse('Validation error.', 422, $validator->errors());
+            }
+
+            $currency = tenant('currency') ?: config('app.base_currency', 'USD');
+            $currencyService = app(CurrencyService::class);
+            $settleDate = $request->filled('date')
+                ? Carbon::parse($request->input('date'))
+                : now();
+
+            $remainingAmount = (float) $debt->remaining_amount;
+
+            if ($request->filled('amount')) {
+                $rawAmount = (float) $request->input('amount');
+                $baseSettleAmount = $currencyService->convertToBaseAmount($rawAmount, $currency, $settleDate);
+
+                if ($baseSettleAmount > ($remainingAmount + 0.009)) {
+                    return $this->errorResponse("Settlement amount cannot exceed remaining balance of {$remainingAmount}.", 422);
+                }
+            } else {
+                $baseSettleAmount = $remainingAmount;
+            }
+
+            return DB::transaction(function () use ($debt, $familyId, $user, $baseSettleAmount, $settleDate, $request) {
                 $categoryId = $debt->transaction?->category_id ?? Category::where('slug', 'others')->value('id');
                 $settleTxType = $debt->type === 'lent' ? 'income' : 'expense';
                 $settleAction = $debt->type === 'lent' ? 'Received from' : 'Paid to';
-                $settleTxNote = "Settled: {$settleAction} {$debt->person_name}";
-                if (! empty($debt->note)) {
-                    $settleTxNote .= ": {$debt->note}";
+                if ($request->filled('note')) {
+                    $settleTxNote = $request->input('note');
+                } else {
+                    $settleTxNote = "Settled: {$settleAction} {$debt->person_name}";
+                    if (! empty($debt->note)) {
+                        $settleTxNote .= ": {$debt->note}";
+                    }
                 }
-
-                $settledAt = now();
 
                 $settlementTx = Transaction::create([
                     'family_id' => $familyId,
                     'user_id' => $user->id,
                     'category_id' => $categoryId,
                     'type' => $settleTxType,
-                    'amount' => $debt->amount,
-                    'date' => $settledAt->toDateString(),
+                    'amount' => $baseSettleAmount,
+                    'date' => $settleDate->toDateString(),
                     'note' => $settleTxNote,
                     'visibility' => $debt->visibility,
                 ]);
 
+                DebtSettlement::create([
+                    'debt_id' => $debt->id,
+                    'transaction_id' => $settlementTx->id,
+                    'user_id' => $user->id,
+                    'amount' => $baseSettleAmount,
+                    'date' => $settleDate->toDateString(),
+                    'note' => $settleTxNote,
+                ]);
+
+                $newSettled = round((float) $debt->settled_amount + $baseSettleAmount, 2);
+                $isFull = $newSettled >= round((float) $debt->amount - 0.009, 2);
+
                 $debt->update([
-                    'status' => 'settled',
-                    'settled_at' => $settledAt,
+                    'settled_amount' => $newSettled,
+                    'status' => $isFull ? 'settled' : 'partially_settled',
+                    'settled_at' => $isFull ? $settleDate : null,
                     'settlement_transaction_id' => $settlementTx->id,
                 ]);
 
+                $message = $isFull ? 'Debt settled successfully.' : 'Partial debt settlement recorded successfully.';
+
                 return $this->successResponse(
-                    $this->formatDebt($debt->fresh(['user', 'transaction', 'settlementTransaction'])),
-                    'Debt settled successfully.'
+                    $this->formatDebt($debt->fresh(['user', 'transaction', 'settlementTransaction', 'settlements.transaction'])),
+                    $message
                 );
             });
         } catch (Throwable $e) {
@@ -335,7 +382,7 @@ class DebtController extends Controller
     }
 
     /**
-     * Remove the specified debt record and its linked transactions.
+     * Soft-delete the specified debt record and its linked transactions.
      */
     public function destroy(Request $request, int|string $id): JsonResponse
     {
@@ -368,12 +415,60 @@ class DebtController extends Controller
                     $debt->settlementTransaction->delete();
                 }
 
+                foreach ($debt->settlements as $settlement) {
+                    $settlement->transaction?->delete();
+                    $settlement->delete();
+                }
+
                 $debt->delete();
             });
 
             return $this->successResponse(null, ucfirst($debt->type).' record deleted successfully.');
         } catch (Throwable $e) {
             Log::error('Delete debt failed: '.$e->getMessage());
+
+            return $this->errorResponse();
+        }
+    }
+
+    /**
+     * Restore the specified soft-deleted debt record and its linked transactions.
+     */
+    public function restore(Request $request, int|string $id): JsonResponse
+    {
+        try {
+            $familyId = tenant('id');
+
+            if (! $familyId) {
+                return $this->errorResponse('Family context is required.', 400);
+            }
+
+            $user = $request->user();
+
+            $debt = Debt::onlyTrashed()->where('family_id', $familyId)->find($id);
+
+            if (! $debt) {
+                return $this->errorResponse('Debt record not found.', 404);
+            }
+
+            if ($debt->visibility === 'personal' && $debt->user_id !== $user->id) {
+                return $this->errorResponse('Debt record not found.', 404);
+            }
+
+            DB::transaction(function () use ($debt) {
+                $debt->restore();
+                $debt->transaction()->withTrashed()->restore();
+                $debt->settlementTransaction()->withTrashed()->restore();
+
+                foreach (DebtSettlement::onlyTrashed()->where('debt_id', $debt->id)->get() as $settlement) {
+                    $settlement->transaction()->withTrashed()->restore();
+                    $settlement->restore();
+                }
+            });
+
+            return $this->successResponse(null, 'Debt restored successfully.');
+        } catch (Throwable $e) {
+            Log::error('Restore debt failed: '.$e->getMessage());
 
             return $this->errorResponse();
         }
@@ -397,7 +492,13 @@ class DebtController extends Controller
         };
 
         $data = $debt->toArray();
-        $data['display'] = $format($debt->amount, $debt->date);
+        $debtDate = $debt->date ?? now();
+        $data['settled_amount'] = (float) $debt->settled_amount;
+        $data['remaining_amount'] = (float) $debt->remaining_amount;
+
+        $data['display'] = $format($debt->amount, $debtDate);
+        $data['display']['settled'] = $format($debt->settled_amount, $debtDate);
+        $data['display']['remaining'] = $format($debt->remaining_amount, $debtDate);
 
         if ($debt->relationLoaded('transaction') && $debt->transaction) {
             $data['transaction']['display'] = $format($debt->transaction->amount, $debt->transaction->date);
@@ -405,6 +506,18 @@ class DebtController extends Controller
 
         if ($debt->relationLoaded('settlementTransaction') && $debt->settlementTransaction) {
             $data['settlement_transaction']['display'] = $format($debt->settlementTransaction->amount, $debt->settlementTransaction->date);
+        }
+
+        if ($debt->relationLoaded('settlements') && $debt->settlements) {
+            $data['settlements'] = $debt->settlements->map(function ($settlement) use ($format) {
+                $sData = $settlement->toArray();
+                $sData['display'] = $format($settlement->amount, $settlement->date);
+                if ($settlement->relationLoaded('transaction') && $settlement->transaction) {
+                    $sData['transaction']['display'] = $format($settlement->transaction->amount, $settlement->transaction->date);
+                }
+
+                return $sData;
+            })->toArray();
         }
 
         return $data;

@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * @property int $id
@@ -15,16 +17,19 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $person_name
  * @property string $type 'lent' or 'borrowed'
  * @property string $amount Decimal amount
+ * @property string $settled_amount Decimal amount settled so far
  * @property int|string $date
  * @property int|string|null $due_date
  * @property string|null $note
  * @property string $visibility 'shared' or 'personal'
- * @property string $status 'pending' or 'settled'
+ * @property string $status 'pending', 'partially_settled', or 'settled'
  * @property int|string|null $settled_at
  * @property int|null $transaction_id
  * @property int|null $settlement_transaction_id
  * @property int|string|null $created_at
  * @property int|string|null $updated_at
+ * @property int|string|null $deleted_at
+ * @property-read float $remaining_amount
  */
 #[Fillable([
     'family_id',
@@ -32,6 +37,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'person_name',
     'type',
     'amount',
+    'settled_amount',
     'date',
     'due_date',
     'note',
@@ -43,7 +49,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 ])]
 class Debt extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     /**
      * Get the attributes that should be cast.
@@ -54,11 +60,13 @@ class Debt extends Model
     {
         return [
             'amount' => 'decimal:2',
+            'settled_amount' => 'decimal:2',
             'date' => 'timestamp',
             'due_date' => 'timestamp',
             'settled_at' => 'timestamp',
             'created_at' => 'timestamp',
             'updated_at' => 'timestamp',
+            'deleted_at' => 'timestamp',
         ];
     }
 
@@ -92,6 +100,32 @@ class Debt extends Model
     public function settlementTransaction(): BelongsTo
     {
         return $this->belongsTo(Transaction::class, 'settlement_transaction_id');
+    }
+
+    /**
+     * Get the settlement records generated for this debt.
+     *
+     * @return HasMany<DebtSettlement, $this>
+     */
+    public function settlements(): HasMany
+    {
+        return $this->hasMany(DebtSettlement::class, 'debt_id');
+    }
+
+    /**
+     * Calculate remaining unsettled balance in base amount.
+     */
+    public function getRemainingAmountAttribute(): float
+    {
+        return max(0.0, round((float) $this->amount - (float) $this->settled_amount, 2));
+    }
+
+    /**
+     * Scope query to partially settled records.
+     */
+    public function scopePartiallySettled(Builder $query): Builder
+    {
+        return $query->where('status', 'partially_settled');
     }
 
     /**

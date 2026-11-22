@@ -191,6 +191,6 @@ class BudgetTest extends TestCase
             ->assertJsonPath('status', true)
             ->assertJsonPath('message', 'Budget deleted successfully.');
 
-        $this->assertDatabaseMissing('budgets', ['id' => $budget->id]);
+        $this->assertSoftDeleted('budgets', ['id' => $budget->id]);
     }
 }
