@@ -7,7 +7,6 @@ use App\Services\CurrencyService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
@@ -136,9 +135,7 @@ class ReportController extends Controller
                 'by_category' => $byCategory,
             ], 'Report retrieved successfully.');
         } catch (Throwable $e) {
-            Log::error('Fetch report failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Fetch report failed');
         }
     }
 
@@ -232,9 +229,7 @@ class ReportController extends Controller
 
             return response()->stream($callback, 200, $headers);
         } catch (Throwable $e) {
-            Log::error('Export report failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Export report failed');
         }
     }
 }

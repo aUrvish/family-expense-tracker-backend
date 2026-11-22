@@ -8,7 +8,6 @@ use App\Services\CurrencyService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class DashboardController extends Controller
@@ -168,9 +167,7 @@ class DashboardController extends Controller
 
             return $this->successResponse($data, 'Dashboard data retrieved successfully.');
         } catch (Throwable $e) {
-            Log::error('Fetch dashboard data failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Fetch dashboard data failed');
         }
     }
 }

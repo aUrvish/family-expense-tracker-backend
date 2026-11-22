@@ -7,7 +7,6 @@ use App\Models\Category;
 use App\Models\Transaction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Throwable;
@@ -41,9 +40,7 @@ class CategoryController extends Controller
 
             return $this->successResponse($categories, 'Categories fetched successfully.');
         } catch (Throwable $e) {
-            Log::error('Fetch categories failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Fetch categories failed');
         }
     }
 
@@ -160,9 +157,7 @@ class CategoryController extends Controller
 
             return $this->successResponse($data, 'Custom category created successfully.', 201);
         } catch (Throwable $e) {
-            Log::error('Save category failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Save category failed');
         }
     }
 
@@ -190,9 +185,7 @@ class CategoryController extends Controller
 
             return $this->successResponse($data, 'Category retrieved successfully.');
         } catch (Throwable $e) {
-            Log::error('Show category failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Show category failed');
         }
     }
 
@@ -237,9 +230,7 @@ class CategoryController extends Controller
 
             return $this->successResponse(null, 'Category deleted successfully.');
         } catch (Throwable $e) {
-            Log::error('Delete category failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Delete category failed');
         }
     }
 
@@ -280,9 +271,7 @@ class CategoryController extends Controller
 
             return $this->successResponse(null, 'Category restored successfully.');
         } catch (Throwable $e) {
-            Log::error('Restore category failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Restore category failed');
         }
     }
 }

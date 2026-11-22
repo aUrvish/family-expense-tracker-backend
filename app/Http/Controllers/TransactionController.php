@@ -7,7 +7,6 @@ use App\Services\CurrencyService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Throwable;
@@ -83,9 +82,7 @@ class TransactionController extends Controller
 
             return $this->successResponse($transactions, 'Transactions retrieved successfully.');
         } catch (Throwable $e) {
-            Log::error('Fetch transactions failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Fetch transactions failed');
         }
     }
 
@@ -186,9 +183,7 @@ class TransactionController extends Controller
                 201
             );
         } catch (Throwable $e) {
-            Log::error('Save transaction failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Save transaction failed');
         }
     }
 
@@ -217,9 +212,7 @@ class TransactionController extends Controller
 
             return $this->successResponse($this->formatTransaction($transaction), 'Transaction retrieved successfully.');
         } catch (Throwable $e) {
-            Log::error('Show transaction failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Show transaction failed');
         }
     }
 
@@ -253,9 +246,7 @@ class TransactionController extends Controller
 
             return $this->successResponse(null, $type.' deleted successfully.');
         } catch (Throwable $e) {
-            Log::error('Delete transaction failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Delete transaction failed');
         }
     }
 
@@ -288,9 +279,7 @@ class TransactionController extends Controller
 
             return $this->successResponse(null, ucfirst($transaction->type).' restored successfully.');
         } catch (Throwable $e) {
-            Log::error('Restore transaction failed: '.$e->getMessage());
-
-            return $this->errorResponse();
+            return $this->handleException($e, 'Restore transaction failed');
         }
     }
 
