@@ -646,4 +646,141 @@ class FamilyFinanceEnhancementsTest extends TestCase
             'date' => $txDate,
         ]);
     }
+
+    public function test_category_ownership_is_enforced_across_all_apis(): void
+    {
+        $otherFamily = Family::create([
+            'name' => 'Other Family',
+            'currency' => 'USD',
+        ]);
+
+        $otherCategory = Category::create([
+            'family_id' => $otherFamily->id,
+            'name' => 'Other Category',
+            'slug' => 'other-category',
+            'color' => '#EF4444',
+        ]);
+
+        // 1. Transaction save rejects another family's category
+        $txReject = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson('/api/transaction/save', [
+                'category_id' => $otherCategory->id,
+                'type' => 'expense',
+                'amount' => 30.00,
+                'date' => now()->toDateString(),
+            ]);
+
+        $txReject->assertStatus(422)
+            ->assertJsonValidationErrors(['category_id']);
+
+        // 2. Transaction save succeeds with system category, but rejects updating to other family's category
+        $txValid = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson('/api/transaction/save', [
+                'category_id' => $this->category->id,
+                'type' => 'expense',
+                'amount' => 30.00,
+                'date' => now()->toDateString(),
+            ]);
+        $txValid->assertStatus(201);
+        $txId = $txValid->json('data.id');
+
+        $txUpdateReject = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson('/api/transaction/save', [
+                'id' => $txId,
+                'category_id' => $otherCategory->id,
+                'type' => 'expense',
+                'amount' => 30.00,
+            ]);
+        $txUpdateReject->assertStatus(422)
+            ->assertJsonValidationErrors(['category_id']);
+
+        // 3. Budget save rejects another family's category
+        $budgetReject = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson('/api/budget/save', [
+                'category_id' => $otherCategory->id,
+                'amount' => 150.00,
+            ]);
+
+        $budgetReject->assertStatus(422)
+            ->assertJsonValidationErrors(['category_id']);
+
+        // 4. Budget save succeeds with system category
+        $budgetValid = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson('/api/budget/save', [
+                'category_id' => $this->category->id,
+                'amount' => 150.00,
+            ]);
+        $budgetValid->assertStatus(201);
+
+        // 5. Debt save rejects another family's category
+        $debtReject = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson('/api/debt/save', [
+                'person_name' => 'Eve',
+                'type' => 'lent',
+                'amount' => 50.00,
+                'category_id' => $otherCategory->id,
+            ]);
+
+        $debtReject->assertStatus(422)
+            ->assertJsonValidationErrors(['category_id']);
+
+        // 6. Debt save succeeds with system category
+        $debtValid = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson('/api/debt/save', [
+                'person_name' => 'Eve',
+                'type' => 'lent',
+                'amount' => 50.00,
+                'category_id' => $this->category->id,
+            ]);
+        $debtValid->assertStatus(201);
+    }
+
+    public function test_existing_settled_debts_preserve_zero_remaining_balance_without_backfill(): void
+    {
+        // Simulate a legacy debt row in the database created prior to the partial settlement feature:
+        // status is 'settled', amount is 200.00, but settled_amount is 0.00 (as defaulted by migration).
+        $legacySettledDebt = Debt::create([
+            'family_id' => $this->family->id,
+            'user_id' => $this->user->id,
+            'person_name' => 'Frank',
+            'type' => 'lent',
+            'amount' => 200.00,
+            'settled_amount' => 0.00,
+            'date' => now()->toDateString(),
+            'status' => 'settled',
+            'visibility' => 'shared',
+        ]);
+
+        // Model attribute / accessor level assertions
+        $this->assertSame(0.0, (float) $legacySettledDebt->remaining_amount);
+        $this->assertSame(200.0, (float) $legacySettledDebt->settled_amount);
+
+        // API endpoint GET /api/debt/{id} returns 0 remaining and full settled amount
+        $showResponse = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->getJson("/api/debt/{$legacySettledDebt->id}");
+
+        $showResponse->assertStatus(200)
+            ->assertJsonPath('data.status', 'settled')
+            ->assertJsonPath('data.remaining_amount', 0)
+            ->assertJsonPath('data.settled_amount', 200)
+            ->assertJsonPath('data.display.remaining.amount_cents', 0)
+            ->assertJsonPath('data.display.settled.amount_cents', 20000);
+
+        // Attempting to settle an already-settled legacy debt returns early with settled message
+        $settleResponse = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson("/api/debt/{$legacySettledDebt->id}/settle");
+
+        $settleResponse->assertStatus(200)
+            ->assertJsonPath('message', 'Debt record is already settled.')
+            ->assertJsonPath('data.remaining_amount', 0);
+    }
 }

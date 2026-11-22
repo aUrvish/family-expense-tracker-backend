@@ -94,6 +94,12 @@ class DebtController extends Controller
     public function save(Request $request): JsonResponse
     {
         try {
+            $familyId = tenant('id');
+
+            if (! $familyId) {
+                return $this->errorResponse('Family context is required.', 400);
+            }
+
             $validator = Validator::make($request->all(), [
                 'id' => ['nullable', 'integer', 'exists:debts,id'],
                 'person_name' => ['required', 'string', 'max:255'],
@@ -104,7 +110,16 @@ class DebtController extends Controller
                 'note' => ['nullable', 'string', 'max:255'],
                 'visibility' => ['nullable', 'string', Rule::in(['shared', 'personal'])],
                 'status' => ['nullable', 'string', Rule::in(['pending', 'settled'])],
-                'category_id' => ['nullable', 'integer', 'exists:categories,id'],
+                'category_id' => [
+                    'nullable',
+                    'integer',
+                    Rule::exists('categories', 'id')->where(function ($query) use ($familyId) {
+                        $query->whereNull('deleted_at')
+                            ->where(function ($q) use ($familyId) {
+                                $q->whereNull('family_id')->orWhere('family_id', $familyId);
+                            });
+                    }),
+                ],
             ]);
 
             if ($validator->fails()) {
@@ -113,11 +128,6 @@ class DebtController extends Controller
 
             $validated = $validator->validated();
             $user = $request->user();
-            $familyId = tenant('id');
-
-            if (! $familyId) {
-                return $this->errorResponse('Family context is required.', 400);
-            }
 
             // Find existing debt for update or create a new instance
             if (! empty($validated['id'])) {

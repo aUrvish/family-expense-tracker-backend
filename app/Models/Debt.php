@@ -113,10 +113,31 @@ class Debt extends Model
     }
 
     /**
+     * Get the settled amount, preserving correct balance for existing settled debts
+     * that were settled before the settled_amount column was introduced.
+     */
+    public function getSettledAmountAttribute(?string $value): string
+    {
+        $settled = (float) $value;
+        $amount = (float) ($this->attributes['amount'] ?? 0);
+        $status = $this->attributes['status'] ?? null;
+
+        if ($status === 'settled' && $settled <= 0.0 && $amount > 0.0) {
+            return number_format($amount, 2, '.', '');
+        }
+
+        return number_format($settled, 2, '.', '');
+    }
+
+    /**
      * Calculate remaining unsettled balance in base amount.
      */
     public function getRemainingAmountAttribute(): float
     {
+        if ($this->status === 'settled') {
+            return 0.0;
+        }
+
         return max(0.0, round((float) $this->amount - (float) $this->settled_amount, 2));
     }
 

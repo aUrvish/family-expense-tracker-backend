@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -15,6 +16,10 @@ return new class extends Migration
             $table->decimal('settled_amount', 12, 2)->default(0.00)->after('amount');
             $table->softDeletes()->after('settlement_transaction_id');
         });
+
+        DB::table('debts')->where('status', 'settled')->update([
+            'settled_amount' => DB::raw('amount'),
+        ]);
 
         Schema::create('debt_settlements', function (Blueprint $table) {
             $table->id();

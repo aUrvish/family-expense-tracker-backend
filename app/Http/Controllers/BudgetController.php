@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Throwable;
 
 class BudgetController extends Controller
@@ -153,7 +154,16 @@ class BudgetController extends Controller
 
             $validator = Validator::make($request->all(), [
                 'id' => ['nullable', 'integer', 'exists:budgets,id'],
-                'category_id' => ['required', 'integer', 'exists:categories,id'],
+                'category_id' => [
+                    'required',
+                    'integer',
+                    Rule::exists('categories', 'id')->where(function ($query) use ($familyId) {
+                        $query->whereNull('deleted_at')
+                            ->where(function ($q) use ($familyId) {
+                                $q->whereNull('family_id')->orWhere('family_id', $familyId);
+                            });
+                    }),
+                ],
                 'amount' => ['required', 'numeric', 'gt:0'],
                 'month' => ['nullable', 'integer', 'between:1,12'],
                 'year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
