@@ -554,8 +554,8 @@ class DebtTest extends TestCase
             ->assertJsonPath('status', true)
             ->assertJsonPath('message', 'Lent record deleted successfully.');
 
-        $this->assertDatabaseMissing('debts', ['id' => $debtId]);
-        $this->assertDatabaseMissing('transactions', ['id' => $txId]);
+        $this->assertSoftDeleted('debts', ['id' => $debtId]);
+        $this->assertSoftDeleted('transactions', ['id' => $txId]);
     }
 
     public function test_debt_validation_fails_with_invalid_data(): void

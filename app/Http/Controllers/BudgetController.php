@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Throwable;
 
 class BudgetController extends Controller
@@ -153,7 +154,16 @@ class BudgetController extends Controller
 
             $validator = Validator::make($request->all(), [
                 'id' => ['nullable', 'integer', 'exists:budgets,id'],
-                'category_id' => ['required', 'integer', 'exists:categories,id'],
+                'category_id' => [
+                    'required',
+                    'integer',
+                    Rule::exists('categories', 'id')->where(function ($query) use ($familyId) {
+                        $query->whereNull('deleted_at')
+                            ->where(function ($q) use ($familyId) {
+                                $q->whereNull('family_id')->orWhere('family_id', $familyId);
+                            });
+                    }),
+                ],
                 'amount' => ['required', 'numeric', 'gt:0'],
                 'month' => ['nullable', 'integer', 'between:1,12'],
                 'year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
@@ -247,6 +257,34 @@ class BudgetController extends Controller
             return $this->successResponse(null, 'Budget deleted successfully.');
         } catch (Throwable $e) {
             Log::error('Delete budget failed: '.$e->getMessage());
+
+            return $this->errorResponse();
+        }
+    }
+
+    /**
+     * Restore a soft-deleted category budget.
+     */
+    public function restore(Request $request, int|string $id): JsonResponse
+    {
+        try {
+            $familyId = tenant('id');
+
+            if (! $familyId) {
+                return $this->errorResponse('Family context is required.', 400);
+            }
+
+            $budget = Budget::onlyTrashed()->where('family_id', $familyId)->find($id);
+
+            if (! $budget) {
+                return $this->errorResponse('Budget record not found.', 404);
+            }
+
+            $budget->restore();
+
+            return $this->successResponse(null, 'Budget restored successfully.');
+        } catch (Throwable $e) {
+            Log::error('Restore budget failed: '.$e->getMessage());
 
             return $this->errorResponse();
         }

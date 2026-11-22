@@ -15,13 +15,15 @@ class CategoryTest extends TestCase
 
     public function test_unauthenticated_user_cannot_access_categories(): void
     {
-        $response = $this->getJson('/api/categories');
+        $response = $this->getJson('/api/category');
 
         $response->assertStatus(401);
     }
 
     public function test_authenticated_user_can_fetch_categories_list(): void
     {
+        $family = Family::create(['name' => 'Test Family']);
+
         Category::create([
             'name' => 'Grocery',
             'slug' => 'grocery',
@@ -37,6 +39,7 @@ class CategoryTest extends TestCase
         ]);
 
         $user = User::create([
+            'family_id' => $family->id,
             'name' => 'Test User',
             'email' => 'user@example.com',
             'password' => 'secret123',
@@ -44,7 +47,9 @@ class CategoryTest extends TestCase
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        $response = $this->withToken($token)->getJson('/api/categories');
+        $response = $this->withToken($token)
+            ->withHeader('X-Family-Id', $family->id)
+            ->getJson('/api/category');
 
         $response->assertStatus(200)
             ->assertJsonPath('status', true)
@@ -86,7 +91,7 @@ class CategoryTest extends TestCase
         $this->assertEquals($initialCount, Category::count());
     }
 
-    public function test_categories_are_central_and_accessible_with_or_without_family_context(): void
+    public function test_categories_require_family_context(): void
     {
         $this->seed(CategorySeeder::class);
 
@@ -100,17 +105,16 @@ class CategoryTest extends TestCase
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        // 1. Without X-Family-Id header
+        // 1. Without X-Family-Id header -> 400
         $responseWithoutHeader = $this->withToken($token)
-            ->getJson('/api/categories');
+            ->getJson('/api/category');
 
-        $responseWithoutHeader->assertStatus(200)
-            ->assertJsonPath('status', true);
+        $responseWithoutHeader->assertStatus(400);
 
-        // 2. With X-Family-Id header
+        // 2. With X-Family-Id header -> 200
         $responseWithHeader = $this->withToken($token)
             ->withHeader('X-Family-Id', $family->id)
-            ->getJson('/api/categories');
+            ->getJson('/api/category');
 
         $responseWithHeader->assertStatus(200)
             ->assertJsonPath('status', true);

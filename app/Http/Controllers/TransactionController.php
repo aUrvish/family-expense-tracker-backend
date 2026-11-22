@@ -95,11 +95,26 @@ class TransactionController extends Controller
     public function save(Request $request): JsonResponse
     {
         try {
+            $familyId = tenant('id');
+
+            if (! $familyId) {
+                return $this->errorResponse('Family context is required.', 400);
+            }
+
             $validator = Validator::make($request->all(), [
                 'id' => ['nullable', 'integer', 'exists:transactions,id'],
                 'type' => ['required', 'string', Rule::in(['expense', 'income'])],
                 'amount' => ['required', 'numeric', 'gt:0'],
-                'category_id' => ['required', 'integer', 'exists:categories,id'],
+                'category_id' => [
+                    'required',
+                    'integer',
+                    Rule::exists('categories', 'id')->where(function ($query) use ($familyId) {
+                        $query->whereNull('deleted_at')
+                            ->where(function ($q) use ($familyId) {
+                                $q->whereNull('family_id')->orWhere('family_id', $familyId);
+                            });
+                    }),
+                ],
                 'date' => ['nullable'],
                 'note' => ['nullable', 'string', 'max:255'],
                 'payment_method' => ['nullable', 'string', 'max:50'],
@@ -112,12 +127,6 @@ class TransactionController extends Controller
 
             $validated = $validator->validated();
             $user = $request->user();
-
-            $familyId = tenant('id');
-
-            if (! $familyId) {
-                return $this->errorResponse('Family context is required.', 400);
-            }
 
             $currency = tenant('currency') ?: config('app.base_currency', 'USD');
             $currencyService = app(CurrencyService::class);
@@ -245,6 +254,41 @@ class TransactionController extends Controller
             return $this->successResponse(null, $type.' deleted successfully.');
         } catch (Throwable $e) {
             Log::error('Delete transaction failed: '.$e->getMessage());
+
+            return $this->errorResponse();
+        }
+    }
+
+    /**
+     * Restore the specified soft-deleted transaction.
+     */
+    public function restore(Request $request, int|string $id): JsonResponse
+    {
+        try {
+            $familyId = tenant('id');
+
+            if (! $familyId) {
+                return $this->errorResponse('Family context is required.', 400);
+            }
+
+            $user = $request->user();
+
+            $transaction = Transaction::onlyTrashed()->where('family_id', $familyId)->find($id);
+
+            if (! $transaction) {
+                return $this->errorResponse('Transaction not found.', 404);
+            }
+
+            // Personal transactions can only be restored by their creator
+            if ($transaction->visibility === 'personal' && $transaction->user_id !== $user->id) {
+                return $this->errorResponse('Transaction not found.', 404);
+            }
+
+            $transaction->restore();
+
+            return $this->successResponse(null, ucfirst($transaction->type).' restored successfully.');
+        } catch (Throwable $e) {
+            Log::error('Restore transaction failed: '.$e->getMessage());
 
             return $this->errorResponse();
         }

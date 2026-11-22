@@ -936,7 +936,7 @@ class TransactionTest extends TestCase
             ->assertJsonPath('status', true)
             ->assertJsonPath('message', 'Expense deleted successfully.');
 
-        $this->assertDatabaseMissing('transactions', [
+        $this->assertSoftDeleted('transactions', [
             'id' => $transaction->id,
         ]);
     }
@@ -1036,7 +1036,7 @@ class TransactionTest extends TestCase
             ->assertJsonPath('status', true)
             ->assertJsonPath('message', 'Expense deleted successfully.');
 
-        $this->assertDatabaseMissing('transactions', [
+        $this->assertSoftDeleted('transactions', [
             'id' => $sharedTx->id,
         ]);
     }

@@ -65,6 +65,11 @@
       "key": "year",
       "value": "2026",
       "type": "string"
+    },
+    {
+      "key": "recurringId",
+      "value": "1",
+      "type": "string"
     }
   ],
   "item": [
@@ -318,18 +323,180 @@
               {
                 "key": "Accept",
                 "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID"
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/categories",
+              "raw": "{{baseUrl}}/category",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "categories"
+                "category"
               ]
             },
-            "description": "Authenticated category listing. Does not require X-Family-Id."
+            "description": "List all standard system categories and custom categories for the family."
+          }
+        },
+        {
+          "name": "Create custom category",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Vacation & Trips\",\n  \"icon\": \"plane\",\n  \"color\": \"#3B82F6\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/category/save",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "category",
+                "save"
+              ]
+            },
+            "description": "Create a family-defined custom category."
+          }
+        },
+        {
+          "name": "Get category",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/category/{{categoryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "category",
+                "{{categoryId}}"
+              ]
+            },
+            "description": "Retrieve category details by ID."
+          }
+        },
+        {
+          "name": "Update custom category",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": 1,\n  \"name\": \"Vacation & Trips Updated\",\n  \"icon\": \"plane\",\n  \"color\": \"#2563EB\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/category/save",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "category",
+                "save"
+              ]
+            },
+            "description": "Update an existing family custom category (system categories cannot be edited)."
+          }
+        },
+        {
+          "name": "Delete custom category",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/category/{{categoryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "category",
+                "{{categoryId}}"
+              ]
+            },
+            "description": "Soft-delete a custom category (system categories cannot be deleted; categories in active use are protected)."
+          }
+        },
+        {
+          "name": "Restore custom category",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/category/{{categoryId}}/restore",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "category",
+                "{{categoryId}}",
+                "restore"
+              ]
+            },
+            "description": "Restore a soft-deleted custom category."
           }
         }
       ]
@@ -505,6 +672,35 @@
             },
             "description": ""
           }
+        },
+        {
+          "name": "Restore transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transaction/{{transactionId}}/restore",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transaction",
+                "{{transactionId}}",
+                "restore"
+              ]
+            },
+            "description": "Restore a soft-deleted transaction."
+          }
         }
       ]
     },
@@ -662,9 +858,13 @@
                 "value": "application/json"
               },
               {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
                 "key": "X-Family-Id",
                 "value": "{{familyId}}",
-                "description": "Family UUID returned by registration/login."
+                "description": "Family UUID"
               }
             ],
             "url": {
@@ -678,7 +878,11 @@
                 "settle"
               ]
             },
-            "description": "Marks the debt as settled and creates the corresponding settlement transaction."
+            "description": "Settle a debt partially (with amount specified) or fully (amount omitted). Creates settlement record and linked transaction.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 50,\n  \"date\": \"2026-11-20\",\n  \"note\": \"Optional partial or full settlement note\"\n}"
+            }
           }
         },
         {
@@ -707,6 +911,35 @@
               ]
             },
             "description": ""
+          }
+        },
+        {
+          "name": "Restore debt",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/debt/{{debtId}}/restore",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "debt",
+                "{{debtId}}",
+                "restore"
+              ]
+            },
+            "description": "Restore a soft-deleted debt record and all its linked transactions and settlement records."
           }
         }
       ]
@@ -1015,6 +1248,265 @@
               ]
             },
             "description": ""
+          }
+        },
+        {
+          "name": "Restore budget",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/budget/{{budgetId}}/restore",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "budget",
+                "{{budgetId}}",
+                "restore"
+              ]
+            },
+            "description": "Restore a soft-deleted category budget."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Recurring Transactions",
+      "item": [
+        {
+          "name": "List recurring transactions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/recurring-transaction?status=active",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "recurring-transaction"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "active",
+                  "description": "Filter by status: active, paused, or completed"
+                },
+                {
+                  "key": "type",
+                  "value": "expense",
+                  "disabled": true
+                },
+                {
+                  "key": "scope",
+                  "value": "household",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Retrieve paginated recurring transaction schedules for the family."
+          }
+        },
+        {
+          "name": "Create recurring transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"category_id\": 1,\n  \"type\": \"expense\",\n  \"amount\": 19.99,\n  \"frequency\": \"monthly\",\n  \"interval\": 1,\n  \"start_date\": \"2026-11-20\",\n  \"end_date\": null,\n  \"note\": \"Cloud Storage Subscription\",\n  \"payment_method\": \"Credit Card\",\n  \"visibility\": \"shared\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/recurring-transaction/save",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "recurring-transaction",
+                "save"
+              ]
+            },
+            "description": "Create or update a recurring transaction template/schedule."
+          }
+        },
+        {
+          "name": "Get recurring transaction",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/recurring-transaction/{{recurringId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "recurring-transaction",
+                "{{recurringId}}"
+              ]
+            },
+            "description": "Retrieve recurring transaction template details and recent generated transactions."
+          }
+        },
+        {
+          "name": "Delete recurring transaction",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/recurring-transaction/{{recurringId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "recurring-transaction",
+                "{{recurringId}}"
+              ]
+            },
+            "description": "Soft-delete recurring transaction schedule."
+          }
+        },
+        {
+          "name": "Restore recurring transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/recurring-transaction/{{recurringId}}/restore",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "recurring-transaction",
+                "{{recurringId}}",
+                "restore"
+              ]
+            },
+            "description": "Restore soft-deleted recurring transaction schedule."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Trash & Recovery",
+      "item": [
+        {
+          "name": "Get trash overview",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trash",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trash"
+              ]
+            },
+            "description": "Retrieve consolidated overview of all soft-deleted transactions, debts, budgets, categories, and recurring schedules for the family."
+          }
+        },
+        {
+          "name": "Empty trash permanently",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/trash/empty",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "trash",
+                "empty"
+              ]
+            },
+            "description": "Permanently delete (force delete) all soft-deleted items in the trash for the family."
           }
         }
       ]
