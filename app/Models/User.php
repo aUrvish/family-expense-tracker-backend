@@ -27,6 +27,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property Carbon|null $email_verified_at
  * @property string $password
  * @property string|null $remember_token
+ * @property string $role 'owner' or 'member'
  * @property string|null $family_id
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -35,12 +36,31 @@ use Laravel\Sanctum\HasApiTokens;
  * @property-read Collection<int, Transaction> $transactions
  * @property-read Collection<int, Debt> $debts
  */
-#[Fillable(['name', 'email', 'password', 'family_id'])]
+#[Fillable(['name', 'email', 'password', 'family_id', 'role'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable;
+
+    /**
+     * Determine if this user is a family owner.
+     *
+     * Falls back to checking if the user is the earliest member in the family
+     * to preserve backwards compatibility with existing families.
+     */
+    public function isOwner(): bool
+    {
+        if ($this->role === 'owner') {
+            return true;
+        }
+
+        if (! $this->family_id) {
+            return false;
+        }
+
+        return $this->id === (int) self::where('family_id', $this->family_id)->min('id');
+    }
 
     /**
      * Get the attributes that should be cast.

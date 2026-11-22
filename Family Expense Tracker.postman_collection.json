@@ -70,6 +70,11 @@
       "key": "recurringId",
       "value": "1",
       "type": "string"
+    },
+    {
+      "key": "invitationId",
+      "value": "1",
+      "type": "string"
     }
   ],
   "item": [
@@ -102,7 +107,7 @@
                 "register"
               ]
             },
-            "description": "Register a user. Omit invite_code to create a new family, or supply an existing family UUID to join it.",
+            "description": "Register a user. Omit invite_code to create a new family, or supply a valid invitation code to join an existing family.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Alex Morgan\",\n  \"email\": \"alex@example.com\",\n  \"password\": \"password123\",\n  \"password_confirmation\": \"password123\",\n  \"family_name\": \"Morgan Family\"\n}",
@@ -257,7 +262,42 @@
             "description": "",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"code\": \"123456\",\n  \"password\": \"newpassword123\",\n  \"password_confirmation\": \"newpassword123\"\n}",
+              "raw": "{\n  \"email\": \"alex@example.com\",\n  \"code\": \"123456\",\n  \"password\": \"newpassword123\",\n  \"password_confirmation\": \"newpassword123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Change password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/change-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "change-password"
+              ]
+            },
+            "description": "Changes the authenticated user password and revokes all other active device sessions.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"password123\",\n  \"password\": \"newpassword123\",\n  \"password_confirmation\": \"newpassword123\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1041,6 +1081,134 @@
               ]
             },
             "description": ""
+          }
+        },
+        {
+          "name": "List family invitations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/family/invitations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "family",
+                "invitations"
+              ]
+            },
+            "description": "List all active and historical invitations for the active family."
+          }
+        },
+        {
+          "name": "Create family invitation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/family/invitations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "family",
+                "invitations"
+              ]
+            },
+            "description": "Generates a new secure, high-entropy invitation code for joining this family (valid for 48 hours).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newmember@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete family invitation",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/family/invitations/{{invitationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "family",
+                "invitations",
+                "{{invitationId}}"
+              ]
+            },
+            "description": "Deletes an active invitation so it can no longer be used."
+          }
+        },
+        {
+          "name": "Regenerate family invitation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/family/invitations/{{invitationId}}/regenerate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "family",
+                "invitations",
+                "{{invitationId}}",
+                "regenerate"
+              ]
+            },
+            "description": "Generates a new code and resets expiration for an existing invitation."
           }
         }
       ]
