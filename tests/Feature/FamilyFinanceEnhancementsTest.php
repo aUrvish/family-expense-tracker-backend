@@ -745,14 +745,14 @@ class FamilyFinanceEnhancementsTest extends TestCase
     public function test_existing_settled_debts_preserve_zero_remaining_balance_without_backfill(): void
     {
         // Simulate a legacy debt row in the database created prior to the partial settlement feature:
-        // status is 'settled', amount is 200.00, but settled_amount is 0.00 (as defaulted by migration).
+        // status is 'settled', amount is 200.00, and settled_amount is null (no backfill or default).
         $legacySettledDebt = Debt::create([
             'family_id' => $this->family->id,
             'user_id' => $this->user->id,
             'person_name' => 'Frank',
             'type' => 'lent',
             'amount' => 200.00,
-            'settled_amount' => 0.00,
+            'settled_amount' => null,
             'date' => now()->toDateString(),
             'status' => 'settled',
             'visibility' => 'shared',

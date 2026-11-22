@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('debts', function (Blueprint $table) {
-            $table->decimal('settled_amount', 12, 2)->default(0.00)->after('amount');
+            $table->decimal('settled_amount', 12, 2)->nullable()->after('amount');
             $table->softDeletes()->after('settlement_transaction_id');
         });
 
