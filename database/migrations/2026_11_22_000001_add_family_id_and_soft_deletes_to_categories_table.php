@@ -17,7 +17,7 @@ return new class extends Migration
 
             $table->dropUnique(['name']);
             $table->dropUnique(['slug']);
-            $table->index(['family_id', 'slug']);
+            $table->unique(['family_id', 'slug']);
         });
     }
 
@@ -27,7 +27,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('categories', function (Blueprint $table) {
-            $table->dropIndex(['family_id', 'slug']);
+            $table->dropUnique(['family_id', 'slug']);
             $table->unique(['name']);
             $table->unique(['slug']);
             $table->dropForeign(['family_id']);

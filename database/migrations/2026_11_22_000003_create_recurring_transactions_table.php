@@ -39,6 +39,7 @@ return new class extends Migration
         Schema::table('transactions', function (Blueprint $table) {
             $table->foreignId('recurring_transaction_id')->nullable()->after('category_id')->constrained('recurring_transactions')->nullOnDelete();
             $table->softDeletes()->after('visibility');
+            $table->unique(['recurring_transaction_id', 'date']);
         });
     }
 
@@ -48,6 +49,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('transactions', function (Blueprint $table) {
+            $table->dropUnique(['recurring_transaction_id', 'date']);
             $table->dropForeign(['recurring_transaction_id']);
             $table->dropColumn(['recurring_transaction_id', 'deleted_at']);
         });

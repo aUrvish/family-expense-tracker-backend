@@ -278,23 +278,6 @@ class DebtController extends Controller
 
             $user = $request->user();
 
-            $debt = Debt::where('family_id', $familyId)->find($id);
-
-            if (! $debt) {
-                return $this->errorResponse('Debt record not found.', 404);
-            }
-
-            if ($debt->visibility === 'personal' && $debt->user_id !== $user->id) {
-                return $this->errorResponse('Debt record not found.', 404);
-            }
-
-            if ($debt->status === 'settled') {
-                return $this->successResponse(
-                    $this->formatDebt($debt->load(['user', 'transaction', 'settlementTransaction', 'settlements.transaction'])),
-                    'Debt record is already settled.'
-                );
-            }
-
             $validator = Validator::make($request->all(), [
                 'amount' => 'nullable|numeric|min:0.01',
                 'date' => 'nullable|date',
@@ -311,23 +294,51 @@ class DebtController extends Controller
                 ? Carbon::parse($request->input('date'))
                 : now();
 
-            $remainingAmount = (float) $debt->remaining_amount;
+            return DB::transaction(function () use ($id, $familyId, $user, $request, $currency, $currencyService, $settleDate) {
+                $debt = Debt::where('family_id', $familyId)->lockForUpdate()->find($id);
 
-            if ($request->filled('amount')) {
-                $rawAmount = (float) $request->input('amount');
-                $baseSettleAmount = $currencyService->convertToBaseAmount($rawAmount, $currency, $settleDate);
-
-                if ($baseSettleAmount > ($remainingAmount + 0.009)) {
-                    return $this->errorResponse("Settlement amount cannot exceed remaining balance of {$remainingAmount}.", 422);
+                if (! $debt) {
+                    return $this->errorResponse('Debt record not found.', 404);
                 }
-            } else {
-                $baseSettleAmount = $remainingAmount;
-            }
 
-            return DB::transaction(function () use ($debt, $familyId, $user, $baseSettleAmount, $settleDate, $request) {
+                if ($debt->visibility === 'personal' && $debt->user_id !== $user->id) {
+                    return $this->errorResponse('Debt record not found.', 404);
+                }
+
+                if ($debt->status === 'settled') {
+                    return $this->successResponse(
+                        $this->formatDebt($debt->load(['user', 'transaction', 'settlementTransaction', 'settlements.transaction'])),
+                        'Debt record is already settled.'
+                    );
+                }
+
+                // Cent-based integer math for financial precision under lock
+                $totalCents = (int) round((float) $debt->amount * 100);
+                $settledCents = (int) round((float) $debt->settled_amount * 100);
+                $remainingCents = max(0, $totalCents - $settledCents);
+                $remainingAmount = round($remainingCents / 100, 2);
+
+                if ($remainingCents <= 0) {
+                    return $this->errorResponse('This debt is already settled.', 422);
+                }
+
+                if ($request->filled('amount')) {
+                    $rawAmount = (float) $request->input('amount');
+                    $baseSettleAmount = $currencyService->convertToBaseAmount($rawAmount, $currency, $settleDate);
+                    $settleCents = (int) round($baseSettleAmount * 100);
+
+                    if ($settleCents > $remainingCents) {
+                        return $this->errorResponse("Settlement amount cannot exceed remaining balance of {$remainingAmount}.", 422);
+                    }
+                } else {
+                    $baseSettleAmount = $remainingAmount;
+                    $settleCents = $remainingCents;
+                }
+
                 $categoryId = $debt->transaction?->category_id ?? Category::where('slug', 'others')->value('id');
                 $settleTxType = $debt->type === 'lent' ? 'income' : 'expense';
                 $settleAction = $debt->type === 'lent' ? 'Received from' : 'Paid to';
+
                 if ($request->filled('note')) {
                     $settleTxNote = $request->input('note');
                 } else {
@@ -357,8 +368,9 @@ class DebtController extends Controller
                     'note' => $settleTxNote,
                 ]);
 
-                $newSettled = round((float) $debt->settled_amount + $baseSettleAmount, 2);
-                $isFull = $newSettled >= round((float) $debt->amount - 0.009, 2);
+                $newSettledCents = $settledCents + $settleCents;
+                $newSettled = round($newSettledCents / 100, 2);
+                $isFull = ($newSettledCents >= $totalCents);
 
                 $debt->update([
                     'settled_amount' => $newSettled,

@@ -6,6 +6,7 @@ use App\Models\RecurringTransaction;
 use App\Models\Transaction;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -34,18 +35,28 @@ class ProcessRecurringTransactionsCommand extends Command
         $today = now()->toDateString();
         $this->info("Processing due recurring transactions for date [{$today}]...");
 
-        $dueRecurring = RecurringTransaction::query()
+        $dueRecurringIds = RecurringTransaction::query()
             ->where('status', 'active')
             ->whereDate('next_due_date', '<=', $today)
-            ->get();
+            ->pluck('id');
 
         $generatedCount = 0;
         $skippedCount = 0;
 
-        foreach ($dueRecurring as $recurring) {
+        foreach ($dueRecurringIds as $recurringId) {
             try {
-                DB::transaction(function () use ($recurring, &$generatedCount, &$skippedCount) {
+                DB::transaction(function () use ($recurringId, $today, &$generatedCount, &$skippedCount) {
+                    $recurring = RecurringTransaction::lockForUpdate()->find($recurringId);
+
+                    if (! $recurring || $recurring->status !== 'active') {
+                        return;
+                    }
+
                     $dueDate = Carbon::parse($recurring->next_due_date)->toDateString();
+
+                    if ($dueDate > $today) {
+                        return;
+                    }
 
                     // Duplicate prevention: check if a transaction for this recurring template on this due date already exists
                     $exists = Transaction::where('recurring_transaction_id', $recurring->id)
@@ -53,19 +64,23 @@ class ProcessRecurringTransactionsCommand extends Command
                         ->exists();
 
                     if (! $exists) {
-                        Transaction::create([
-                            'family_id' => $recurring->family_id,
-                            'user_id' => $recurring->user_id,
-                            'category_id' => $recurring->category_id,
-                            'recurring_transaction_id' => $recurring->id,
-                            'type' => $recurring->type,
-                            'amount' => $recurring->amount,
-                            'date' => $dueDate,
-                            'note' => $recurring->note ? "{$recurring->note} (Recurring)" : 'Recurring '.ucfirst($recurring->type),
-                            'payment_method' => $recurring->payment_method,
-                            'visibility' => $recurring->visibility,
-                        ]);
-                        $generatedCount++;
+                        try {
+                            Transaction::create([
+                                'family_id' => $recurring->family_id,
+                                'user_id' => $recurring->user_id,
+                                'category_id' => $recurring->category_id,
+                                'recurring_transaction_id' => $recurring->id,
+                                'type' => $recurring->type,
+                                'amount' => $recurring->amount,
+                                'date' => $dueDate,
+                                'note' => $recurring->note ? "{$recurring->note} (Recurring)" : 'Recurring '.ucfirst($recurring->type),
+                                'payment_method' => $recurring->payment_method,
+                                'visibility' => $recurring->visibility,
+                            ]);
+                            $generatedCount++;
+                        } catch (UniqueConstraintViolationException) {
+                            $skippedCount++;
+                        }
                     } else {
                         $skippedCount++;
                     }
@@ -89,8 +104,8 @@ class ProcessRecurringTransactionsCommand extends Command
                     ]);
                 });
             } catch (Throwable $e) {
-                Log::error("Failed processing recurring transaction [{$recurring->id}]: ".$e->getMessage());
-                $this->error("Error processing recurring transaction ID {$recurring->id}: {$e->getMessage()}");
+                Log::error("Failed processing recurring transaction [{$recurringId}]: ".$e->getMessage());
+                $this->error("Error processing recurring transaction ID {$recurringId}: {$e->getMessage()}");
             }
         }
 

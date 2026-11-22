@@ -104,9 +104,18 @@ class CategoryController extends Controller
                     ]);
                 }
 
+                // Generate unique slug for this family
+                $baseSlug = Str::slug($name).'-'.substr((string) $familyId, 0, 8);
+                $slug = $baseSlug;
+                $counter = 1;
+                while (Category::withTrashed()->where('family_id', $familyId)->where('id', '!=', $category->id)->where('slug', $slug)->exists()) {
+                    $slug = $baseSlug.'-'.$counter;
+                    $counter++;
+                }
+
                 $category->update([
                     'name' => $name,
-                    'slug' => Str::slug($name).'-'.substr((string) $familyId, 0, 8),
+                    'slug' => $slug,
                     'icon' => $validated['icon'] ?? $category->icon,
                     'color' => $validated['color'] ?? $category->color,
                 ]);
@@ -130,10 +139,18 @@ class CategoryController extends Controller
                 ]);
             }
 
+            $baseSlug = Str::slug($name).'-'.substr((string) $familyId, 0, 8);
+            $slug = $baseSlug;
+            $counter = 1;
+            while (Category::withTrashed()->where('family_id', $familyId)->where('slug', $slug)->exists()) {
+                $slug = $baseSlug.'-'.$counter;
+                $counter++;
+            }
+
             $category = Category::create([
                 'family_id' => $familyId,
                 'name' => $name,
-                'slug' => Str::slug($name).'-'.substr((string) $familyId, 0, 8),
+                'slug' => $slug,
                 'icon' => $validated['icon'] ?? 'tag',
                 'color' => $validated['color'] ?? '#6B7280',
             ]);
@@ -244,6 +261,19 @@ class CategoryController extends Controller
 
             if (! $category) {
                 return $this->errorResponse('Trashed category not found.', 404);
+            }
+
+            // Conflict check: prevent restoring if an active category with the same name or slug already exists
+            $conflict = Category::where('family_id', $familyId)
+                ->where('id', '!=', $category->id)
+                ->where(function ($q) use ($category) {
+                    $q->whereRaw('LOWER(name) = ?', [strtolower($category->name)])
+                        ->orWhere('slug', $category->slug);
+                })
+                ->exists();
+
+            if ($conflict) {
+                return $this->errorResponse('Cannot restore category: an active category with this name already exists.', 422);
             }
 
             $category->restore();

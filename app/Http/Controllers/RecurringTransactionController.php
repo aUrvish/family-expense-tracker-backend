@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Throwable;
 
 class RecurringTransactionController extends Controller
@@ -79,7 +80,17 @@ class RecurringTransactionController extends Controller
 
             $validator = Validator::make($request->all(), [
                 'id' => 'nullable|integer|exists:recurring_transactions,id',
-                'category_id' => 'required_without:id|nullable|integer|exists:categories,id',
+                'category_id' => [
+                    'required_without:id',
+                    'nullable',
+                    'integer',
+                    Rule::exists('categories', 'id')->where(function ($query) use ($familyId) {
+                        $query->whereNull('deleted_at')
+                            ->where(function ($q) use ($familyId) {
+                                $q->whereNull('family_id')->orWhere('family_id', $familyId);
+                            });
+                    }),
+                ],
                 'type' => 'required_without:id|nullable|string|in:expense,income',
                 'amount' => 'required_without:id|nullable|numeric|min:0.01',
                 'frequency' => 'required_without:id|nullable|string|in:daily,weekly,monthly,yearly',
@@ -159,6 +170,14 @@ class RecurringTransactionController extends Controller
 
                 if (isset($validated['visibility'])) {
                     $updateData['visibility'] = $validated['visibility'];
+                }
+
+                // Rescheduling behaviour: if schedule parameters changed and template hasn't generated yet or starts in future
+                if (isset($validated['start_date']) || isset($validated['frequency']) || isset($validated['interval'])) {
+                    $newStartDate = $updateData['start_date'] ?? $recurring->start_date;
+                    if (empty($recurring->last_generated_at) || $newStartDate > now()->toDateString()) {
+                        $updateData['next_due_date'] = $newStartDate;
+                    }
                 }
 
                 $recurring->update($updateData);

@@ -10,6 +10,7 @@ use App\Models\RecurringTransaction;
 use App\Models\Transaction;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -453,5 +454,196 @@ class FamilyFinanceEnhancementsTest extends TestCase
 
         $restoreAttempt->assertStatus(404);
         $this->assertSoftDeleted('transactions', ['id' => $personalTx->id]);
+    }
+
+    public function test_concurrent_or_double_settlement_prevents_overpayment(): void
+    {
+        $debt = Debt::create([
+            'family_id' => $this->family->id,
+            'user_id' => $this->user->id,
+            'person_name' => 'David',
+            'type' => 'lent',
+            'amount' => 100.00,
+            'settled_amount' => 0.00,
+            'date' => now()->toDateString(),
+            'status' => 'pending',
+            'visibility' => 'shared',
+        ]);
+
+        // Request 1: settle $70 of $100 -> succeeds, remaining is $30
+        $res1 = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson("/api/debt/{$debt->id}/settle", [
+                'amount' => 70.00,
+            ]);
+
+        $res1->assertStatus(200)
+            ->assertJsonPath('data.status', 'partially_settled')
+            ->assertJsonPath('data.remaining_amount', 30);
+
+        // Request 2 (simulating race/second attempt with stale $70 amount): fails because remaining is only $30
+        $res2 = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson("/api/debt/{$debt->id}/settle", [
+                'amount' => 70.00,
+            ]);
+
+        $res2->assertStatus(422)
+            ->assertJsonPath('status', false);
+
+        // Request 3: settle remaining $30 -> succeeds, debt becomes fully settled
+        $res3 = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson("/api/debt/{$debt->id}/settle", [
+                'amount' => 30.00,
+            ]);
+
+        $res3->assertStatus(200)
+            ->assertJsonPath('data.status', 'settled')
+            ->assertJsonPath('data.remaining_amount', 0);
+    }
+
+    public function test_recurring_category_ownership_validation_and_isolation(): void
+    {
+        $otherFamily = Family::create([
+            'name' => 'Other Family',
+            'currency' => 'USD',
+        ]);
+
+        $otherCategory = Category::create([
+            'family_id' => $otherFamily->id,
+            'name' => 'Secret Other Category',
+            'slug' => 'secret-other-cat',
+            'color' => '#EF4444',
+        ]);
+
+        // 1. Family A attempts to create recurring transaction using Other Family's category -> rejected 422
+        $recurringRes = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson('/api/recurring-transaction/save', [
+                'category_id' => $otherCategory->id,
+                'type' => 'expense',
+                'amount' => 25.00,
+                'frequency' => 'monthly',
+                'start_date' => now()->toDateString(),
+            ]);
+
+        $recurringRes->assertStatus(422)
+            ->assertJsonValidationErrors(['category_id']);
+
+        // 2. Family A creates recurring transaction with system category -> succeeds
+        $validRes = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson('/api/recurring-transaction/save', [
+                'category_id' => $this->category->id,
+                'type' => 'expense',
+                'amount' => 25.00,
+                'frequency' => 'monthly',
+                'start_date' => now()->toDateString(),
+            ]);
+
+        $validRes->assertStatus(201);
+        $recurringId = $validRes->json('data.id');
+
+        // 3. Family A attempts to update recurring transaction to Other Family's category -> rejected 422
+        $updateRes = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson('/api/recurring-transaction/save', [
+                'id' => $recurringId,
+                'category_id' => $otherCategory->id,
+            ]);
+
+        $updateRes->assertStatus(422)
+            ->assertJsonValidationErrors(['category_id']);
+    }
+
+    public function test_category_restore_rejects_conflict_with_active_category(): void
+    {
+        // 1. Create custom category
+        $create1 = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson('/api/category/save', [
+                'name' => 'Pet Care',
+            ]);
+        $cat1Id = $create1->json('data.id');
+
+        // 2. Delete it
+        $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->deleteJson("/api/category/{$cat1Id}")
+            ->assertStatus(200);
+
+        // 3. Create a new active category with the same name
+        $create2 = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson('/api/category/save', [
+                'name' => 'Pet Care',
+            ]);
+        $create2->assertStatus(201);
+
+        // 4. Attempt to restore the first one -> rejected with 422 conflict
+        $restoreConflict = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson("/api/category/{$cat1Id}/restore");
+
+        $restoreConflict->assertStatus(422)
+            ->assertJsonPath('status', false);
+
+        $this->assertSoftDeleted('categories', ['id' => $cat1Id]);
+    }
+
+    public function test_recurring_transaction_rescheduling_and_database_duplicate_constraint(): void
+    {
+        // 1. Create recurring schedule starting next month
+        $futureDate = now()->addMonth()->toDateString();
+        $createRes = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson('/api/recurring-transaction/save', [
+                'category_id' => $this->category->id,
+                'type' => 'expense',
+                'amount' => 50.00,
+                'frequency' => 'monthly',
+                'start_date' => $futureDate,
+            ]);
+
+        $recurringId = $createRes->json('data.id');
+        $this->assertSame(Carbon::parse($futureDate)->timestamp, $createRes->json('data.next_due_date'));
+
+        // 2. Rescheduling: update start_date to a different future date
+        $rescheduledDate = now()->addMonths(2)->toDateString();
+        $updateRes = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson('/api/recurring-transaction/save', [
+                'id' => $recurringId,
+                'start_date' => $rescheduledDate,
+            ]);
+
+        $updateRes->assertStatus(200)
+            ->assertJsonPath('data.next_due_date', Carbon::parse($rescheduledDate)->timestamp);
+
+        // 3. Database unique constraint prevents duplicate (recurring_transaction_id, date)
+        $txDate = now()->toDateString();
+        Transaction::create([
+            'family_id' => $this->family->id,
+            'user_id' => $this->user->id,
+            'category_id' => $this->category->id,
+            'recurring_transaction_id' => $recurringId,
+            'type' => 'expense',
+            'amount' => 50.00,
+            'date' => $txDate,
+        ]);
+
+        $this->expectException(QueryException::class);
+
+        // Attempting direct DB insert with same recurring_transaction_id and date throws QueryException
+        Transaction::create([
+            'family_id' => $this->family->id,
+            'user_id' => $this->user->id,
+            'category_id' => $this->category->id,
+            'recurring_transaction_id' => $recurringId,
+            'type' => 'expense',
+            'amount' => 50.00,
+            'date' => $txDate,
+        ]);
     }
 }
