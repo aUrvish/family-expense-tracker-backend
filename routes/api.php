@@ -79,12 +79,7 @@ Route::middleware(['auth:sanctum', IdentifyFamily::class])->group(function () {
     Route::get('/family/members', [FamilyController::class, 'members'])->name('family.members');
     Route::get('/family/members/{id}', [FamilyController::class, 'show'])->name('family.members.show');
 
-    Route::controller(FamilyInvitationController::class)->prefix('family/invitations')->group(function () {
-        Route::get('/', 'index')->name('family.invitations.index');
-        Route::post('/', 'store')->name('family.invitations.store');
-        Route::delete('/{id}', 'destroy')->name('family.invitations.destroy');
-        Route::post('/{id}/regenerate', 'regenerate')->name('family.invitations.regenerate');
-    });
+    Route::post('/family/invitations', [FamilyInvitationController::class, 'store'])->name('family.invitations.store');
 
     Route::controller(ReportController::class)->group(function () {
         Route::get('/reports', 'index')->name('reports.index');

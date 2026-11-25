@@ -23,7 +23,6 @@ return new class extends Migration
             $table->id();
             $table->foreignUuid('family_id')->constrained('families')->cascadeOnDelete();
             $table->foreignId('invited_by_user_id')->nullable()->constrained('users')->nullOnDelete();
-            $table->string('email')->nullable();
             $table->string('code', 64)->unique();
             $table->timestamps();
 

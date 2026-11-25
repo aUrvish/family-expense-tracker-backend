@@ -13,7 +13,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $id
  * @property string $family_id
  * @property int|null $invited_by_user_id
- * @property string|null $email
  * @property string $code
  * @property string $status 'active' or 'expired'
  * @property Carbon|int|string|null $created_at
@@ -22,7 +21,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[Fillable([
     'family_id',
     'invited_by_user_id',
-    'email',
     'code',
 ])]
 class FamilyInvitation extends Model
@@ -92,19 +90,9 @@ class FamilyInvitation extends Model
     /**
      * Check if the invitation is active and valid for registration.
      */
-    public function isValid(?string $targetEmail = null): bool
+    public function isValid(): bool
     {
-        if ($this->isExpired()) {
-            return false;
-        }
-
-        if (! empty($this->email)) {
-            if (empty($targetEmail) || strtolower(trim($this->email)) !== strtolower(trim($targetEmail))) {
-                return false;
-            }
-        }
-
-        return true;
+        return ! $this->isExpired();
     }
 
     /**

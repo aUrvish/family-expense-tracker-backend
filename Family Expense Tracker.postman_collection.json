@@ -1084,34 +1084,6 @@
           }
         },
         {
-          "name": "List family invitations",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "X-Family-Id",
-                "value": "{{familyId}}",
-                "description": "Family UUID returned by registration/login."
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/family/invitations",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "family",
-                "invitations"
-              ]
-            },
-            "description": "List all active and historical invitations for the active family."
-          }
-        },
-        {
           "name": "Create family invitation",
           "request": {
             "method": "POST",
@@ -1121,10 +1093,6 @@
                 "value": "application/json"
               },
               {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
                 "key": "X-Family-Id",
                 "value": "{{familyId}}",
                 "description": "Family UUID returned by registration/login."
@@ -1140,75 +1108,7 @@
                 "invitations"
               ]
             },
-            "description": "Generates a new secure, high-entropy invitation code for joining this family (valid for 48 hours).",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"newmember@example.com\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          }
-        },
-        {
-          "name": "Delete family invitation",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "X-Family-Id",
-                "value": "{{familyId}}",
-                "description": "Family UUID returned by registration/login."
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/family/invitations/{{invitationId}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "family",
-                "invitations",
-                "{{invitationId}}"
-              ]
-            },
-            "description": "Deletes an active invitation so it can no longer be used."
-          }
-        },
-        {
-          "name": "Regenerate family invitation",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "X-Family-Id",
-                "value": "{{familyId}}",
-                "description": "Family UUID returned by registration/login."
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/family/invitations/{{invitationId}}/regenerate",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "family",
-                "invitations",
-                "{{invitationId}}",
-                "regenerate"
-              ]
-            },
-            "description": "Generates a new code and resets expiration for an existing invitation."
+            "description": "Generates a new secure, high-entropy invitation code for joining this family (valid for 48 hours). No request body required."
           }
         }
       ]
