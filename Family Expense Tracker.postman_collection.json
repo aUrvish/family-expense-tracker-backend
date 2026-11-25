@@ -307,25 +307,70 @@
           }
         },
         {
-          "name": "Get current user",
+          "name": "Get profile",
           "request": {
             "method": "GET",
             "header": [
               {
                 "key": "Accept",
                 "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/user",
+              "raw": "{{baseUrl}}/profile",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "user"
+                "profile"
               ]
             },
-            "description": "Returns the authenticated user and their families."
+            "description": "Returns the authenticated user's profile with their current family details."
+          }
+        },
+        {
+          "name": "Update profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "profile"
+              ]
+            },
+            "description": "Updates the authenticated user's profile (name and/or email) and returns the user with their current family details.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         },
         {

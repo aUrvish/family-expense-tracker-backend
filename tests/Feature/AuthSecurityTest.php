@@ -330,12 +330,16 @@ class AuthSecurityTest extends TestCase
         $this->assertTrue(Hash::check('BrandNewPassword123!', $this->user->password));
 
         // Current session token is still valid
-        $authRes = $this->withToken($this->token)->getJson('/api/user');
+        $authRes = $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->getJson('/api/profile');
         $authRes->assertStatus(200);
 
         // Other session token was revoked
         auth()->forgetGuards();
-        $otherRes = $this->withToken($otherToken)->getJson('/api/user');
+        $otherRes = $this->withToken($otherToken)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->getJson('/api/profile');
         $otherRes->assertStatus(401);
     }
 

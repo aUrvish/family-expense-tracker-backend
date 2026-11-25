@@ -24,7 +24,7 @@ class ApiExceptionHandlingTest extends TestCase
 
     public function test_unauthenticated_request_returns_401(): void
     {
-        $response = $this->getJson('/api/user');
+        $response = $this->getJson('/api/profile');
 
         $response->assertStatus(401)
             ->assertJson([
