@@ -8,6 +8,7 @@ use App\Models\Family;
 use App\Models\FamilyInvitation;
 use App\Models\User;
 use Carbon\Carbon;
+use Closure;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -191,7 +192,17 @@ class AuthController extends Controller
             $currentUser = $request->user();
 
             $validator = Validator::make($request->all(), [
-                'name' => ['sometimes', 'required', 'string', 'max:255'],
+                'name' => [
+                    'sometimes',
+                    'required',
+                    'string',
+                    'max:255',
+                    function (string $attribute, mixed $value, Closure $fail): void {
+                        if (trim((string) $value) === '') {
+                            $fail('The name field is required.');
+                        }
+                    },
+                ],
                 'email' => [
                     'sometimes',
                     'required',

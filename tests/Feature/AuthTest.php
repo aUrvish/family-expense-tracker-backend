@@ -365,6 +365,21 @@ class AuthTest extends TestCase
         $invalidRes->assertStatus(422)
             ->assertJsonValidationErrors(['email']);
 
+        // Whitespace-only name fails validation and preserves existing name
+        $whitespaceRes = $this->withToken($token)
+            ->withHeader('X-Family-Id', $family->id)
+            ->putJson('/api/profile', [
+                'name' => '   ',
+            ]);
+
+        $whitespaceRes->assertStatus(422)
+            ->assertJsonValidationErrors(['name']);
+
+        $this->assertDatabaseHas('users', [
+            'id' => $user->id,
+            'name' => 'Member User',
+        ]);
+
         // Attempt to escalate role or switch family_id is ignored
         $updateRes = $this->withToken($token)
             ->withHeader('X-Family-Id', $family->id)
