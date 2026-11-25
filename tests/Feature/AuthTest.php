@@ -355,6 +355,16 @@ class AuthTest extends TestCase
         $duplicateRes->assertStatus(422)
             ->assertJsonValidationErrors(['email']);
 
+        // Differently-cased duplicate email is also rejected with 422
+        $caseDuplicateRes = $this->withToken($token)
+            ->withHeader('X-Family-Id', $family->id)
+            ->putJson('/api/profile', [
+                'email' => '  TAKEN@EXAMPLE.COM  ',
+            ]);
+
+        $caseDuplicateRes->assertStatus(422)
+            ->assertJsonValidationErrors(['email']);
+
         // Partial update with invalid email fails validation
         $invalidRes = $this->withToken($token)
             ->withHeader('X-Family-Id', $family->id)

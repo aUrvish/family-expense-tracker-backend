@@ -190,8 +190,13 @@ class AuthController extends Controller
     {
         try {
             $currentUser = $request->user();
+            $input = $request->all();
 
-            $validator = Validator::make($request->all(), [
+            if (isset($input['email']) && is_string($input['email'])) {
+                $input['email'] = strtolower(trim($input['email']));
+            }
+
+            $validator = Validator::make($input, [
                 'name' => [
                     'sometimes',
                     'required',
@@ -220,10 +225,6 @@ class AuthController extends Controller
 
             if (isset($updates['name'])) {
                 $updates['name'] = trim($updates['name']);
-            }
-
-            if (isset($updates['email'])) {
-                $updates['email'] = strtolower(trim($updates['email']));
             }
 
             if ($updates !== []) {
