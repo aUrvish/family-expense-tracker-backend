@@ -34,7 +34,7 @@ class AuthController extends Controller
     /**
      * Register a new user.
      *
-     * - With `invite_code` (a family UUID): joins that existing family.
+     * - With `invite_code` (an invitation code): validates the invitation and joins that existing family as a member.
      * - Without `invite_code`: creates a new family and joins it.
      *
      * The same email may register in multiple different families, but only
@@ -70,9 +70,9 @@ class AuthController extends Controller
                         ->lockForUpdate()
                         ->first();
 
-                    if (! $invitation || ! $invitation->isValid($data['email'])) {
+                    if (! $invitation || ! $invitation->isValid()) {
                         throw ValidationException::withMessages([
-                            'invite_code' => ['The provided invitation code is invalid, expired, or not authorized for this email.'],
+                            'invite_code' => ['The provided invitation code is invalid or expired.'],
                         ]);
                     }
 

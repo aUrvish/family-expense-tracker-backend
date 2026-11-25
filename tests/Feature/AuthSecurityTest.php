@@ -11,6 +11,7 @@ use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
 class AuthSecurityTest extends TestCase
@@ -226,9 +227,9 @@ class AuthSecurityTest extends TestCase
         $this->assertDatabaseMissing('users', ['email' => 'attacker@example.com']);
     }
 
-    public function test_family_invitations_crud_and_lifecycle(): void
+    public function test_family_invitation_creation_and_registration(): void
     {
-        // 1. Create invitation without user limits (hardcoded 48 hours)
+        // 1. Owner generates an invitation (48-hour expiration)
         $createRes = $this->withToken($this->token)
             ->withHeader('X-Family-Id', $this->family->id)
             ->postJson('/api/family/invitations');
@@ -236,19 +237,10 @@ class AuthSecurityTest extends TestCase
         $createRes->assertStatus(201)
             ->assertJsonPath('data.status', 'active');
 
-        $inviteId = $createRes->json('data.id');
         $inviteCode = $createRes->json('data.code');
         $this->assertStringStartsWith('inv_', $inviteCode);
 
-        // 2. List invitations
-        $listRes = $this->withToken($this->token)
-            ->withHeader('X-Family-Id', $this->family->id)
-            ->getJson('/api/family/invitations');
-
-        $listRes->assertStatus(200)
-            ->assertJsonFragment(['code' => $inviteCode]);
-
-        // 3. First user registers with this invitation -> succeeds
+        // 2. First user registers with this invitation -> automatically joins family as member
         $regRes1 = $this->postJson('/api/register', [
             'name' => 'Member One',
             'email' => 'member.one@example.com',
@@ -258,9 +250,10 @@ class AuthSecurityTest extends TestCase
         ]);
 
         $regRes1->assertStatus(201)
-            ->assertJsonPath('data.user.family_id', $this->family->id);
+            ->assertJsonPath('data.user.family_id', $this->family->id)
+            ->assertJsonPath('data.user.role', 'member');
 
-        // 4. Multiple users can join via the same invitation without user limits -> succeeds
+        // 3. Multiple users can join via the same invitation without manual approval -> succeeds
         $regRes2 = $this->postJson('/api/register', [
             'name' => 'Member Two',
             'email' => 'member.two@example.com',
@@ -270,99 +263,40 @@ class AuthSecurityTest extends TestCase
         ]);
 
         $regRes2->assertStatus(201)
-            ->assertJsonPath('data.user.family_id', $this->family->id);
+            ->assertJsonPath('data.user.family_id', $this->family->id)
+            ->assertJsonPath('data.user.role', 'member');
     }
 
-    public function test_invitation_deletion_and_regeneration(): void
+    public function test_removed_invitation_management_routes_are_unavailable(): void
     {
         $invite = FamilyInvitation::create([
             'family_id' => $this->family->id,
             'invited_by_user_id' => $this->user->id,
-            'code' => 'inv_revoke_test_123',
+            'code' => 'inv_removed_routes_test',
         ]);
 
-        // Delete / revoke invitation (force delete)
-        $revokeRes = $this->withToken($this->token)
+        $this->assertTrue(Route::has('family.invitations.store'));
+        $this->assertFalse(Route::has('family.invitations.index'));
+        $this->assertFalse(Route::has('family.invitations.destroy'));
+        $this->assertFalse(Route::has('family.invitations.regenerate'));
+
+        // GET /family/invitations is no longer registered (405 Method Not Allowed because POST exists)
+        $this->withToken($this->token)
             ->withHeader('X-Family-Id', $this->family->id)
-            ->deleteJson("/api/family/invitations/{$invite->id}");
+            ->getJson('/api/family/invitations')
+            ->assertStatus(405);
 
-        $revokeRes->assertStatus(200)
-            ->assertJsonPath('message', 'Invitation deleted successfully.');
-
-        $this->assertDatabaseMissing('family_invitations', ['id' => $invite->id]);
-
-        // Registration with deleted invitation fails
-        $regRes = $this->postJson('/api/register', [
-            'name' => 'Blocked Member',
-            'email' => 'blocked@example.com',
-            'password' => 'Password123!',
-            'password_confirmation' => 'Password123!',
-            'invite_code' => $invite->code,
-        ]);
-
-        $regRes->assertStatus(422)
-            ->assertJsonValidationErrors(['invite_code']);
-
-        // Regenerate invitation
-        $activeInvite = FamilyInvitation::create([
-            'family_id' => $this->family->id,
-            'invited_by_user_id' => $this->user->id,
-            'code' => 'inv_regen_test_123',
-        ]);
-
-        $regenRes = $this->withToken($this->token)
+        // DELETE /family/invitations/{id} is no longer registered (404 Not Found)
+        $this->withToken($this->token)
             ->withHeader('X-Family-Id', $this->family->id)
-            ->postJson("/api/family/invitations/{$activeInvite->id}/regenerate");
+            ->deleteJson("/api/family/invitations/{$invite->id}")
+            ->assertStatus(404);
 
-        $regenRes->assertStatus(200)
-            ->assertJsonPath('data.status', 'active');
-
-        $newCode = $regenRes->json('data.code');
-        $this->assertNotEquals('inv_regen_test_123', $newCode);
-
-        // Registration with newly regenerated code succeeds
-        $regNewRes = $this->postJson('/api/register', [
-            'name' => 'Allowed Member',
-            'email' => 'allowed@example.com',
-            'password' => 'Password123!',
-            'password_confirmation' => 'Password123!',
-            'invite_code' => $newCode,
-        ]);
-
-        $regNewRes->assertStatus(201);
-    }
-
-    public function test_invitation_email_restriction_prevents_unauthorized_email(): void
-    {
-        $invite = FamilyInvitation::create([
-            'family_id' => $this->family->id,
-            'invited_by_user_id' => $this->user->id,
-            'email' => 'specific.person@example.com',
-            'code' => 'inv_specific_only_123',
-        ]);
-
-        // Registration with different email is rejected
-        $wrongEmailRes = $this->postJson('/api/register', [
-            'name' => 'Wrong Person',
-            'email' => 'wrong.person@example.com',
-            'password' => 'Password123!',
-            'password_confirmation' => 'Password123!',
-            'invite_code' => $invite->code,
-        ]);
-
-        $wrongEmailRes->assertStatus(422)
-            ->assertJsonValidationErrors(['invite_code']);
-
-        // Registration with matching email succeeds
-        $correctEmailRes = $this->postJson('/api/register', [
-            'name' => 'Specific Person',
-            'email' => 'specific.person@example.com',
-            'password' => 'Password123!',
-            'password_confirmation' => 'Password123!',
-            'invite_code' => $invite->code,
-        ]);
-
-        $correctEmailRes->assertStatus(201);
+        // POST /family/invitations/{id}/regenerate is no longer registered (404 Not Found)
+        $this->withToken($this->token)
+            ->withHeader('X-Family-Id', $this->family->id)
+            ->postJson("/api/family/invitations/{$invite->id}/regenerate")
+            ->assertStatus(404);
     }
 
     public function test_change_password_requires_current_password_and_revokes_other_sessions(): void
@@ -448,13 +382,6 @@ class AuthSecurityTest extends TestCase
             ->postJson('/api/family/invitations');
 
         $createRes->assertStatus(403);
-
-        // Attempt to list invitations as regular member -> 403
-        $listRes = $this->withHeader('Authorization', "Bearer {$memberToken}")
-            ->withHeader('X-Family-Id', $this->family->id)
-            ->getJson('/api/family/invitations');
-
-        $listRes->assertStatus(403);
     }
 
     public function test_invited_member_can_immediately_access_family_resources(): void
