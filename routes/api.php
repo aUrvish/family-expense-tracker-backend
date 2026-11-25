@@ -24,7 +24,11 @@ Route::controller(AuthController::class)
         Route::middleware('auth:sanctum')->group(function () {
             Route::post('/logout', 'logout')->name('logout');
             Route::post('/change-password', 'changePassword')->name('password.change');
-            Route::get('/user', 'user')->name('user');
+
+            Route::middleware(IdentifyFamily::class)->group(function () {
+                Route::get('/profile', 'profile')->name('profile.show');
+                Route::put('/profile', 'updateProfile')->name('profile.update');
+            });
         });
     });
 

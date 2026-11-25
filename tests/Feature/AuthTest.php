@@ -257,13 +257,132 @@ class AuthTest extends TestCase
 
         $token = $user->createToken('test-token')->plainTextToken;
 
-        $response = $this->withToken($token)->getJson('/api/user');
+        $response = $this->withToken($token)
+            ->withHeader('X-Family-Id', $family->id)
+            ->getJson('/api/profile');
 
         $response->assertStatus(200)
             ->assertJsonPath('status', true)
             ->assertJsonPath('data.user.email', 'charlie@example.com')
             ->assertJsonPath('data.user.family.name', 'Brown Family')
-            ->assertJsonPath('data.families.0.name', 'Brown Family');
+            ->assertJsonMissingPath('data.user.family.currency')
+            ->assertJsonMissingPath('data.user.family.created_at')
+            ->assertJsonMissingPath('data.families');
+    }
+
+    public function test_authenticated_user_can_update_profile_across_families(): void
+    {
+        $familyA = Family::create(['name' => 'Alpha Family']);
+        $familyB = Family::create(['name' => 'Beta Family']);
+
+        $userA = User::create([
+            'family_id' => $familyA->id,
+            'name' => 'Charlie Old',
+            'email' => 'charlie@example.com',
+            'password' => 'secret123',
+            'role' => 'owner',
+        ]);
+        $userB = User::create([
+            'family_id' => $familyB->id,
+            'name' => 'Charlie Old',
+            'email' => 'charlie@example.com',
+            'password' => 'secret123',
+            'role' => 'member',
+        ]);
+
+        $token = $userA->createToken('test-token')->plainTextToken;
+
+        $response = $this->withToken($token)
+            ->withHeader('X-Family-Id', $familyA->id)
+            ->putJson('/api/profile', [
+                'name' => 'Charlie Updated',
+                'email' => 'CHARLIE.NEW@example.com',
+            ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('status', true)
+            ->assertJsonPath('message', 'Profile updated successfully.')
+            ->assertJsonPath('data.user.name', 'Charlie Updated')
+            ->assertJsonPath('data.user.email', 'charlie.new@example.com')
+            ->assertJsonPath('data.user.family.name', 'Alpha Family')
+            ->assertJsonMissingPath('data.user.family.currency')
+            ->assertJsonMissingPath('data.user.family.created_at')
+            ->assertJsonMissingPath('data.families');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $userA->id,
+            'name' => 'Charlie Updated',
+            'email' => 'charlie.new@example.com',
+            'role' => 'owner',
+        ]);
+        $this->assertDatabaseHas('users', [
+            'id' => $userB->id,
+            'name' => 'Charlie Updated',
+            'email' => 'charlie.new@example.com',
+            'role' => 'member',
+        ]);
+    }
+
+    public function test_update_profile_rejects_duplicate_email_and_ignores_protected_fields(): void
+    {
+        $family = Family::create(['name' => 'Test Family']);
+        $otherFamily = Family::create(['name' => 'Other Family']);
+
+        User::create([
+            'family_id' => $otherFamily->id,
+            'name' => 'Other User',
+            'email' => 'taken@example.com',
+            'password' => 'secret123',
+        ]);
+
+        $user = User::create([
+            'family_id' => $family->id,
+            'name' => 'Member User',
+            'email' => 'member@example.com',
+            'password' => 'secret123',
+            'role' => 'member',
+        ]);
+
+        $token = $user->createToken('test-token')->plainTextToken;
+
+        // Duplicate email belonging to another user is rejected
+        $duplicateRes = $this->withToken($token)
+            ->withHeader('X-Family-Id', $family->id)
+            ->putJson('/api/profile', [
+                'email' => 'taken@example.com',
+            ]);
+
+        $duplicateRes->assertStatus(422)
+            ->assertJsonValidationErrors(['email']);
+
+        // Partial update with invalid email fails validation
+        $invalidRes = $this->withToken($token)
+            ->withHeader('X-Family-Id', $family->id)
+            ->putJson('/api/profile', [
+                'email' => 'not-an-email',
+            ]);
+
+        $invalidRes->assertStatus(422)
+            ->assertJsonValidationErrors(['email']);
+
+        // Attempt to escalate role or switch family_id is ignored
+        $updateRes = $this->withToken($token)
+            ->withHeader('X-Family-Id', $family->id)
+            ->putJson('/api/profile', [
+                'name' => 'Member Renamed',
+                'role' => 'owner',
+                'family_id' => $otherFamily->id,
+            ]);
+
+        $updateRes->assertStatus(200)
+            ->assertJsonPath('data.user.name', 'Member Renamed')
+            ->assertJsonPath('data.user.role', 'member')
+            ->assertJsonPath('data.user.family_id', $family->id);
+    }
+
+    public function test_unauthenticated_user_cannot_update_profile(): void
+    {
+        $this->putJson('/api/profile', ['name' => 'Hacker'])->assertStatus(401);
     }
 
     public function test_authenticated_user_can_logout(): void

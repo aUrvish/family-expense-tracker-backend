@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -157,22 +158,73 @@ class AuthController extends Controller
     }
 
     /**
-     * Get the currently authenticated user with their families.
+     * Get the currently authenticated user's profile with their current family details.
      *
-     * @param  Request  $request  Authenticated request (Sanctum).
-     * @return JsonResponse 200 with `user` and `families`.
+     * @param  Request  $request  Authenticated request (Sanctum + IdentifyFamily).
+     * @return JsonResponse 200 with `user` (including current `family`).
      */
-    public function user(Request $request): JsonResponse
+    public function profile(Request $request): JsonResponse
     {
         try {
-            $user = $request->user()->load('family');
+            $user = $request->user()->load('family:id,name');
 
             return $this->successResponse([
                 'user' => $user,
-                'families' => $user->families,
             ], 'User profile fetched successfully.');
         } catch (Throwable $e) {
-            return $this->handleException($e, 'Fetch user failed');
+            return $this->handleException($e, 'Fetch profile failed');
+        }
+    }
+
+    /**
+     * Update the authenticated user's profile (name and/or email).
+     *
+     * Updates all family memberships sharing this account's email,
+     * and returns the user with their current family details.
+     *
+     * @param  Request  $request  Authenticated request (Sanctum + IdentifyFamily).
+     * @return JsonResponse 200 with updated `user` (including current `family`), or 422 on validation errors.
+     */
+    public function updateProfile(Request $request): JsonResponse
+    {
+        try {
+            $currentUser = $request->user();
+
+            $validator = Validator::make($request->all(), [
+                'name' => ['sometimes', 'required', 'string', 'max:255'],
+                'email' => [
+                    'sometimes',
+                    'required',
+                    'email',
+                    'max:255',
+                    Rule::unique('users', 'email')->ignore($currentUser->email, 'email'),
+                ],
+            ]);
+
+            if ($validator->fails()) {
+                return $this->errorResponse('Validation failed.', 422, $validator->errors());
+            }
+
+            $updates = $validator->validated();
+
+            if (isset($updates['name'])) {
+                $updates['name'] = trim($updates['name']);
+            }
+
+            if (isset($updates['email'])) {
+                $updates['email'] = strtolower(trim($updates['email']));
+            }
+
+            if ($updates !== []) {
+                // Keep every family membership row for this email in sync.
+                User::where('email', $currentUser->email)->update($updates);
+            }
+
+            return $this->successResponse([
+                'user' => $currentUser->fresh()->load('family:id,name'),
+            ], 'Profile updated successfully.');
+        } catch (Throwable $e) {
+            return $this->handleException($e, 'Update profile failed');
         }
     }
 
