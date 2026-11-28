@@ -7,19 +7,18 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
 use Laravel\Sanctum\HasApiTokens;
 
 /**
- * Tenant user model representing mobile and web application users.
+ * Global user model representing mobile and web application users.
  *
- * Belongs to a family tenancy context and authenticates via Sanctum API tokens
- * or the default `web` guard.
+ * A single user account (unique by email) may belong to multiple families via
+ * the `family_user` pivot table, with a per-family `role` (`owner` or `member`).
  *
  * @property int $id
  * @property string $name
@@ -27,16 +26,13 @@ use Laravel\Sanctum\HasApiTokens;
  * @property Carbon|null $email_verified_at
  * @property string $password
  * @property string|null $remember_token
- * @property string $role 'owner' or 'member'
- * @property string|null $family_id
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
- * @property-read Family|null $family
  * @property-read Collection<int, Family> $families
  * @property-read Collection<int, Transaction> $transactions
  * @property-read Collection<int, Debt> $debts
  */
-#[Fillable(['name', 'email', 'password', 'family_id', 'role'])]
+#[Fillable(['name', 'email', 'password'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -44,22 +40,32 @@ class User extends Authenticatable
     use HasApiTokens, HasFactory, Notifiable;
 
     /**
-     * Determine if this user is a family owner.
-     *
-     * Falls back to checking if the user is the earliest member in the family
-     * to preserve backwards compatibility with existing families.
+     * Determine if this user is an owner in the active tenant family.
      */
     public function isOwner(): bool
     {
-        if ($this->role === 'owner') {
-            return true;
-        }
+        $familyId = tenant('id');
 
-        if (! $this->family_id) {
+        if (! $familyId) {
             return false;
         }
 
-        return $this->id === (int) self::where('family_id', $this->family_id)->min('id');
+        return $this->families()
+            ->where('families.id', $familyId)
+            ->wherePivot('role', 'owner')
+            ->exists();
+    }
+
+    /**
+     * Get the user's role (`owner` or `member`) in the given family.
+     */
+    public function roleInFamily(string $familyId): ?string
+    {
+        $family = $this->families()
+            ->where('families.id', $familyId)
+            ->first();
+
+        return $family?->pivot?->role;
     }
 
     /**
@@ -78,30 +84,16 @@ class User extends Authenticatable
     }
 
     /**
-     * Get the family that the user belongs to.
+     * Get all families this user belongs to.
      *
-     * @return BelongsTo<Family, $this>
+     * @return BelongsToMany<Family, $this>
      */
-    public function family(): BelongsTo
+    public function families(): BelongsToMany
     {
-        return $this->belongsTo(Family::class);
-    }
-
-    /**
-     * Get all families associated with this user's email.
-     *
-     * @return HasManyThrough<Family, self, $this>
-     */
-    public function families(): HasManyThrough
-    {
-        return $this->hasManyThrough(
-            Family::class,
-            self::class,
-            'email',
-            'id',
-            'email',
-            'family_id'
-        )->orderBy('name');
+        return $this->belongsToMany(Family::class, 'family_user')
+            ->withPivot('role')
+            ->withTimestamps()
+            ->orderBy('name');
     }
 
     /**

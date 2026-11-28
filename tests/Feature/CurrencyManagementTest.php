@@ -55,11 +55,11 @@ class CurrencyManagementTest extends TestCase
         ]);
 
         $this->user = User::create([
-            'family_id' => $this->family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $this->family->users()->attach($this->user->id, ['role' => 'owner']);
 
         $this->token = $this->user->createToken('auth_token')->plainTextToken;
     }

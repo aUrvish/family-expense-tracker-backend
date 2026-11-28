@@ -23,12 +23,13 @@ class IdentifyFamily
         }
 
         $user = $request->user();
+        $family = $user?->families()->where('families.id', $familyId)->first();
 
-        if (! $user || $user->family_id !== $familyId) {
+        if (! $family) {
             abort(403, 'You are not a member of this family.');
         }
 
-        tenancy()->initialize($user->family);
+        tenancy()->initialize($family);
 
         return $next($request);
     }

@@ -36,10 +36,10 @@ class FamilyFinanceEnhancementsTest extends TestCase
         ]);
 
         $this->user = User::factory()->create([
-            'family_id' => $this->family->id,
             'name' => 'Alice Smith',
             'email' => 'alice@example.com',
         ]);
+        $this->family->users()->attach($this->user->id, ['role' => 'owner']);
 
         $this->token = $this->user->createToken('test-token')->plainTextToken;
 
@@ -158,9 +158,9 @@ class FamilyFinanceEnhancementsTest extends TestCase
 
         // 3. Other family does NOT see this custom category
         $otherUser = User::factory()->create([
-            'family_id' => $otherFamily->id,
             'email' => 'johnson@example.com',
         ]);
+        $otherFamily->users()->attach($otherUser->id, ['role' => 'owner']);
         $otherToken = $otherUser->createToken('token-b')->plainTextToken;
 
         auth()->forgetGuards();
@@ -375,9 +375,9 @@ class FamilyFinanceEnhancementsTest extends TestCase
     {
         // Member 2 in the same family
         $member2 = User::factory()->create([
-            'family_id' => $this->family->id,
             'email' => 'member2@example.com',
         ]);
+        $this->family->users()->attach($member2->id, ['role' => 'member']);
         $member2Token = $member2->createToken('member2')->plainTextToken;
 
         // User 1 creates and deletes a personal transaction

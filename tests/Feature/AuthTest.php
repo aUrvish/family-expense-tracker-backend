@@ -40,14 +40,16 @@ class AuthTest extends TestCase
                         'id',
                         'name',
                         'email',
-                        'family_id',
-                        'family' => ['id', 'name'],
+                    ],
+                    'families' => [
+                        '*' => ['id', 'name', 'currency', 'pivot' => ['role']],
                     ],
                 ],
             ])
             ->assertJsonMissingPath('data.token_type')
             ->assertJsonMissingPath('data.family')
-            ->assertJsonPath('status', true);
+            ->assertJsonPath('status', true)
+            ->assertJsonPath('data.families.0.pivot.role', 'owner');
 
         $this->assertDatabaseHas('users', [
             'email' => 'john@example.com',
@@ -57,8 +59,10 @@ class AuthTest extends TestCase
         $this->assertDatabaseCount('families', 1);
 
         $user = User::where('email', 'john@example.com')->first();
-        $this->assertNotNull($user->family_id);
-        $this->assertEquals($user->name."'s Family", $user->family->name);
+        $this->assertCount(1, $user->families);
+        $this->assertEquals($user->name."'s Family", $user->families->first()->name);
+        $this->assertEquals('owner', $user->families->first()->pivot->role);
+        $this->assertTrue(Hash::check('password123', $user->password));
     }
 
     public function test_user_can_register_with_custom_family_name(): void
@@ -74,14 +78,16 @@ class AuthTest extends TestCase
         $response = $this->postJson('/api/register', $payload);
 
         $response->assertStatus(201)
-            ->assertJsonPath('status', true);
+            ->assertJsonPath('status', true)
+            ->assertJsonPath('data.families.0.name', 'The Doe Household')
+            ->assertJsonPath('data.families.0.pivot.role', 'owner');
 
         $this->assertDatabaseHas('families', [
             'name' => 'The Doe Household',
         ]);
 
         $user = User::where('email', 'jane@example.com')->first();
-        $this->assertEquals('The Doe Household', $user->family->name);
+        $this->assertEquals('The Doe Household', $user->families->first()->name);
     }
 
     public function test_user_can_register_into_existing_family_with_invite_code_without_creating_new_family(): void
@@ -111,14 +117,15 @@ class AuthTest extends TestCase
             ->assertJsonPath('status', true)
             ->assertJsonMissingPath('data.family')
             ->assertJsonMissingPath('data.token_type')
-            ->assertJsonPath('data.user.family.id', $existingFamily->id)
-            ->assertJsonPath('data.user.family_id', $existingFamily->id);
+            ->assertJsonPath('data.families.0.id', $existingFamily->id)
+            ->assertJsonPath('data.families.0.pivot.role', 'member');
 
         // Ensures no second family was created
         $this->assertDatabaseCount('families', 1);
 
         $user = User::where('email', 'member@example.com')->first();
-        $this->assertEquals($existingFamily->id, $user->family_id);
+        $this->assertEquals($existingFamily->id, $user->families->first()->id);
+        $this->assertEquals('member', $user->roleInFamily($existingFamily->id));
     }
 
     public function test_registration_fails_if_invite_code_is_invalid(): void
@@ -159,11 +166,11 @@ class AuthTest extends TestCase
     {
         $family = Family::create(['name' => 'Miller Family']);
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Mark Miller',
             'email' => 'mark@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
 
         $response = $this->postJson('/api/login', [
             'email' => 'mark@example.com',
@@ -181,15 +188,16 @@ class AuthTest extends TestCase
                         'id',
                         'name',
                         'email',
-                        'family_id',
-                        'family' => ['id', 'name'],
                     ],
-                    'families',
+                    'families' => [
+                        '*' => ['id', 'name', 'currency', 'pivot' => ['role']],
+                    ],
                 ],
             ])
             ->assertJsonMissingPath('data.token_type')
             ->assertJsonCount(1, 'data.families')
-            ->assertJsonPath('data.families.0.name', 'Miller Family');
+            ->assertJsonPath('data.families.0.name', 'Miller Family')
+            ->assertJsonPath('data.families.0.pivot.role', 'owner');
     }
 
     public function test_login_returns_all_families_associated_with_user_email(): void
@@ -197,19 +205,13 @@ class AuthTest extends TestCase
         $familyA = Family::create(['name' => 'Family Alpha']);
         $familyB = Family::create(['name' => 'Family Beta']);
 
-        User::create([
-            'family_id' => $familyA->id,
-            'name' => 'Multi User A',
+        $user = User::create([
+            'name' => 'Multi User',
             'email' => 'multi@example.com',
             'password' => 'secret123',
         ]);
-
-        User::create([
-            'family_id' => $familyB->id,
-            'name' => 'Multi User B',
-            'email' => 'multi@example.com',
-            'password' => 'secret123',
-        ]);
+        $familyA->users()->attach($user->id, ['role' => 'owner']);
+        $familyB->users()->attach($user->id, ['role' => 'member']);
 
         $response = $this->postJson('/api/login', [
             'email' => 'multi@example.com',
@@ -220,9 +222,9 @@ class AuthTest extends TestCase
             ->assertJsonPath('status', true)
             ->assertJsonCount(2, 'data.families');
 
-        $familyNames = collect($response->json('data.families'))->pluck('name')->all();
-        $this->assertContains('Family Alpha', $familyNames);
-        $this->assertContains('Family Beta', $familyNames);
+        $families = collect($response->json('data.families'))->keyBy('name');
+        $this->assertEquals('owner', $families['Family Alpha']['pivot']['role']);
+        $this->assertEquals('member', $families['Family Beta']['pivot']['role']);
     }
 
     public function test_user_cannot_login_with_invalid_credentials(): void
@@ -249,11 +251,11 @@ class AuthTest extends TestCase
     {
         $family = Family::create(['name' => 'Brown Family']);
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Charlie Brown',
             'email' => 'charlie@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
 
         $token = $user->createToken('test-token')->plainTextToken;
 
@@ -265,6 +267,7 @@ class AuthTest extends TestCase
             ->assertJsonPath('status', true)
             ->assertJsonPath('data.user.email', 'charlie@example.com')
             ->assertJsonPath('data.user.family.name', 'Brown Family')
+            ->assertJsonPath('data.user.family.role', 'owner')
             ->assertJsonMissingPath('data.user.family.currency')
             ->assertJsonMissingPath('data.user.family.created_at')
             ->assertJsonMissingPath('data.families');
@@ -275,22 +278,15 @@ class AuthTest extends TestCase
         $familyA = Family::create(['name' => 'Alpha Family']);
         $familyB = Family::create(['name' => 'Beta Family']);
 
-        $userA = User::create([
-            'family_id' => $familyA->id,
+        $user = User::create([
             'name' => 'Charlie Old',
             'email' => 'charlie@example.com',
             'password' => 'secret123',
-            'role' => 'owner',
         ]);
-        $userB = User::create([
-            'family_id' => $familyB->id,
-            'name' => 'Charlie Old',
-            'email' => 'charlie@example.com',
-            'password' => 'secret123',
-            'role' => 'member',
-        ]);
+        $familyA->users()->attach($user->id, ['role' => 'owner']);
+        $familyB->users()->attach($user->id, ['role' => 'member']);
 
-        $token = $userA->createToken('test-token')->plainTextToken;
+        $token = $user->createToken('test-token')->plainTextToken;
 
         $response = $this->withToken($token)
             ->withHeader('X-Family-Id', $familyA->id)
@@ -305,22 +301,18 @@ class AuthTest extends TestCase
             ->assertJsonPath('data.user.name', 'Charlie Updated')
             ->assertJsonPath('data.user.email', 'charlie.new@example.com')
             ->assertJsonPath('data.user.family.name', 'Alpha Family')
+            ->assertJsonPath('data.user.family.role', 'owner')
             ->assertJsonMissingPath('data.user.family.currency')
             ->assertJsonMissingPath('data.user.family.created_at')
             ->assertJsonMissingPath('data.families');
 
         $this->assertDatabaseHas('users', [
-            'id' => $userA->id,
+            'id' => $user->id,
             'name' => 'Charlie Updated',
             'email' => 'charlie.new@example.com',
-            'role' => 'owner',
         ]);
-        $this->assertDatabaseHas('users', [
-            'id' => $userB->id,
-            'name' => 'Charlie Updated',
-            'email' => 'charlie.new@example.com',
-            'role' => 'member',
-        ]);
+        $this->assertEquals('owner', $user->fresh()->roleInFamily($familyA->id));
+        $this->assertEquals('member', $user->fresh()->roleInFamily($familyB->id));
     }
 
     public function test_update_profile_rejects_duplicate_email_and_ignores_protected_fields(): void
@@ -328,20 +320,19 @@ class AuthTest extends TestCase
         $family = Family::create(['name' => 'Test Family']);
         $otherFamily = Family::create(['name' => 'Other Family']);
 
-        User::create([
-            'family_id' => $otherFamily->id,
+        $otherUser = User::create([
             'name' => 'Other User',
             'email' => 'taken@example.com',
             'password' => 'secret123',
         ]);
+        $otherFamily->users()->attach($otherUser->id, ['role' => 'owner']);
 
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Member User',
             'email' => 'member@example.com',
             'password' => 'secret123',
-            'role' => 'member',
         ]);
+        $family->users()->attach($user->id, ['role' => 'member']);
 
         $token = $user->createToken('test-token')->plainTextToken;
 
@@ -402,7 +393,7 @@ class AuthTest extends TestCase
         $updateRes->assertStatus(200)
             ->assertJsonPath('data.user.name', 'Member Renamed')
             ->assertJsonPath('data.user.role', 'member')
-            ->assertJsonPath('data.user.family_id', $family->id);
+            ->assertJsonPath('data.user.family.id', $family->id);
     }
 
     public function test_unauthenticated_user_cannot_update_profile(): void
@@ -493,71 +484,38 @@ class AuthTest extends TestCase
         ]);
     }
 
-    public function test_same_email_can_register_in_different_families(): void
+    public function test_existing_email_cannot_register_again_even_with_invite_code(): void
     {
         $familyA = Family::create(['name' => 'Family A']);
         $familyB = Family::create(['name' => 'Family B']);
 
-        $inviteA = FamilyInvitation::create([
-            'family_id' => $familyA->id,
-            'code' => 'inv_test_family_a_code',
+        $existingUser = User::create([
+            'name' => 'Existing User',
+            'email' => 'shared@example.com',
+            'password' => 'password123',
         ]);
+        $familyA->users()->attach($existingUser->id, ['role' => 'owner']);
 
         $inviteB = FamilyInvitation::create([
             'family_id' => $familyB->id,
             'code' => 'inv_test_family_b_code',
         ]);
 
-        $responseA = $this->postJson('/api/register', [
-            'name' => 'Shared Email User A',
-            'email' => 'shared@example.com',
-            'password' => 'password123',
-            'password_confirmation' => 'password123',
-            'invite_code' => $inviteA->code,
-        ]);
-
-        $responseA->assertStatus(201);
-
-        $responseB = $this->postJson('/api/register', [
-            'name' => 'Shared Email User B',
-            'email' => 'shared@example.com',
-            'password' => 'password456',
-            'password_confirmation' => 'password456',
-            'invite_code' => $inviteB->code,
-        ]);
-
-        $responseB->assertStatus(201);
-
-        $this->assertEquals(2, User::where('email', 'shared@example.com')->count());
-    }
-
-    public function test_same_email_cannot_register_twice_in_same_family(): void
-    {
-        $family = Family::create(['name' => 'Only One Family']);
-
-        $invite = FamilyInvitation::create([
-            'family_id' => $family->id,
-            'code' => 'inv_test_only_one_family',
-        ]);
-
-        User::create([
-            'family_id' => $family->id,
-            'name' => 'First Member',
-            'email' => 'duplicate@example.com',
-            'password' => 'password123',
-        ]);
-
         $response = $this->postJson('/api/register', [
-            'name' => 'Second Member',
-            'email' => 'duplicate@example.com',
-            'password' => 'password123',
-            'password_confirmation' => 'password123',
-            'invite_code' => $invite->code,
+            'name' => 'Attempted Duplicate',
+            'email' => 'shared@example.com',
+            'password' => 'differentPassword456',
+            'password_confirmation' => 'differentPassword456',
+            'invite_code' => $inviteB->code,
         ]);
 
         $response->assertStatus(422)
             ->assertJsonPath('status', false)
             ->assertJsonStructure(['errors' => ['email']]);
+
+        $this->assertEquals(1, User::where('email', 'shared@example.com')->count());
+        $this->assertTrue(Hash::check('password123', $existingUser->fresh()->password));
+        $this->assertFalse($familyB->users()->where('users.id', $existingUser->id)->exists());
     }
 
     public function test_user_can_reset_password_with_valid_code(): void
@@ -663,11 +621,11 @@ class AuthTest extends TestCase
     {
         $family = Family::create(['name' => 'Valid Family']);
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Valid Member',
             'email' => 'valid@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'member']);
 
         $request = Request::create('/test-tenant', 'GET');
         $request->headers->set('X-Family-Id', $family->id);
@@ -697,11 +655,11 @@ class AuthTest extends TestCase
         $familyB = Family::create(['name' => 'Family B']);
 
         $user = User::create([
-            'family_id' => $familyA->id,
             'name' => 'Member A',
             'email' => 'membera@example.com',
             'password' => 'secret123',
         ]);
+        $familyA->users()->attach($user->id, ['role' => 'owner']);
 
         $request = Request::create('/test-tenant', 'GET');
         $request->headers->set('X-Family-Id', $familyB->id);

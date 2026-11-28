@@ -24,9 +24,8 @@ use Throwable;
 /**
  * Handles authentication for the family budget app.
  *
- * A single email address may exist in several families (one `users` row per
- * family), so lookups by email can return multiple users. Passwords are
- * hashed by the `hashed` cast on the User model.
+ * Each email address maps to a single global `users` record. Family memberships
+ * and per-family roles (`owner` or `member`) are stored in `family_user`.
  *
  * Response helpers `successResponse()` and `errorResponse()` are provided by
  * the base Controller.
@@ -37,20 +36,26 @@ class AuthController extends Controller
      * Register a new user.
      *
      * - With `invite_code` (an invitation code): validates the invitation and joins that existing family as a member.
-     * - Without `invite_code`: creates a new family and joins it.
+     * - Without `invite_code`: creates a new family and joins it as owner.
      *
-     * The same email may register in multiple different families, but only
-     * once per family.
+     * If an account with the email already exists, registration is rejected and the
+     * user is instructed to log in (and join additional families after login).
      *
      * @param  Request  $request  Expects: name, email, password, password_confirmation,
      *                            and optionally invite_code and family_name.
-     * @return JsonResponse 201 with `access_token` and `user` (with family),
+     * @return JsonResponse 201 with `access_token`, `user`, and `families`,
      *                      422 on validation errors, 500 on unexpected failure.
      */
     public function register(Request $request): JsonResponse
     {
         try {
-            $validator = Validator::make($request->all(), [
+            $input = $request->all();
+
+            if (isset($input['email']) && is_string($input['email'])) {
+                $input['email'] = strtolower(trim($input['email']));
+            }
+
+            $validator = Validator::make($input, [
                 'name' => ['required', 'string', 'max:255'],
                 'email' => ['required', 'email', 'max:255'],
                 'password' => ['required', 'string', 'min:8', 'confirmed'],
@@ -64,10 +69,21 @@ class AuthController extends Controller
 
             $data = $validator->validated();
 
-            // Family and user are saved atomically: never a family without a user.
             $user = DB::transaction(function () use ($data) {
-                if (! empty($data['invite_code'])) {
-                    // Lock invitation row inside transaction to prevent race conditions
+                $hasInviteCode = ! empty($data['invite_code']);
+
+                if (User::where('email', $data['email'])->exists()) {
+                    $message = $hasInviteCode
+                        ? 'An account with this email already exists. Please log in to join another family.'
+                        : 'An account with this email already exists. Please log in.';
+
+                    throw ValidationException::withMessages([
+                        'email' => [$message],
+                    ]);
+                }
+
+                if ($hasInviteCode) {
+                    // Lock invitation row inside transaction to prevent race conditions.
                     $invitation = FamilyInvitation::where('code', $data['invite_code'])
                         ->lockForUpdate()
                         ->first();
@@ -79,14 +95,6 @@ class AuthController extends Controller
                     }
 
                     $family = Family::findOrFail($invitation->family_id);
-
-                    // Re-check inside the transaction to guard against race conditions.
-                    if ($family->users()->where('email', $data['email'])->exists()) {
-                        throw ValidationException::withMessages([
-                            'email' => ['The email has already been taken in this family.'],
-                        ]);
-                    }
-
                     $role = 'member';
                 } else {
                     $family = Family::create([
@@ -96,18 +104,21 @@ class AuthController extends Controller
                     $role = 'owner';
                 }
 
-                return User::create([
-                    'family_id' => $family->id,
-                    'name' => $data['name'],
+                $user = User::create([
+                    'name' => trim($data['name']),
                     'email' => $data['email'],
                     'password' => $data['password'], // hashed by the model cast
-                    'role' => $role,
                 ]);
+
+                $family->users()->attach($user->id, ['role' => $role]);
+
+                return $user;
             });
 
             return $this->successResponse([
                 'access_token' => $user->createToken('auth_token')->plainTextToken,
-                'user' => $user->load('family'),
+                'user' => $user,
+                'families' => $user->families,
             ], 'User registered successfully.', 201);
         } catch (Throwable $e) {
             return $this->handleException($e, 'Register failed');
@@ -115,10 +126,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Log in and return an access token, the user, and all of their families.
-     *
-     * Because one email can belong to several families, every user row with
-     * that email is loaded and the first one whose password matches is used.
+     * Log in and return an access token, the user, and all of their families with roles.
      *
      * @param  Request  $request  Expects: email, password.
      * @return JsonResponse 200 with `access_token`, `user` and `families`,
@@ -127,7 +135,13 @@ class AuthController extends Controller
     public function login(Request $request): JsonResponse
     {
         try {
-            $validator = Validator::make($request->all(), [
+            $input = $request->all();
+
+            if (isset($input['email']) && is_string($input['email'])) {
+                $input['email'] = strtolower(trim($input['email']));
+            }
+
+            $validator = Validator::make($input, [
                 'email' => ['required', 'email'],
                 'password' => ['required', 'string'],
             ]);
@@ -137,14 +151,9 @@ class AuthController extends Controller
             }
 
             $data = $validator->validated();
+            $user = User::where('email', $data['email'])->first();
 
-            // Single query; `family` is eager loaded to avoid N+1.
-            $user = User::with('family')
-                ->where('email', $data['email'])
-                ->get()
-                ->first(fn (User $candidate) => Hash::check($data['password'], $candidate->password));
-
-            if (! $user) {
+            if (! $user || ! Hash::check($data['password'], $user->password)) {
                 return $this->errorResponse('Invalid credentials.', 401);
             }
 
@@ -159,15 +168,26 @@ class AuthController extends Controller
     }
 
     /**
-     * Get the currently authenticated user's profile with their current family details.
+     * Get the currently authenticated user's profile with their active family details.
      *
      * @param  Request  $request  Authenticated request (Sanctum + IdentifyFamily).
-     * @return JsonResponse 200 with `user` (including current `family`).
+     * @return JsonResponse 200 with `user` (including active `family`).
      */
     public function profile(Request $request): JsonResponse
     {
         try {
-            $user = $request->user()->load('family:id,name');
+            $user = $request->user();
+            $family = tenant();
+
+            if ($family instanceof Family) {
+                $role = $user->roleInFamily($family->id);
+                $user->setAttribute('role', $role);
+                $user->setAttribute('family', [
+                    'id' => $family->id,
+                    'name' => $family->name,
+                    'role' => $role,
+                ]);
+            }
 
             return $this->successResponse([
                 'user' => $user,
@@ -180,11 +200,8 @@ class AuthController extends Controller
     /**
      * Update the authenticated user's profile (name and/or email).
      *
-     * Updates all family memberships sharing this account's email,
-     * and returns the user with their current family details.
-     *
      * @param  Request  $request  Authenticated request (Sanctum + IdentifyFamily).
-     * @return JsonResponse 200 with updated `user` (including current `family`), or 422 on validation errors.
+     * @return JsonResponse 200 with updated `user` (including active `family`), or 422 on validation errors.
      */
     public function updateProfile(Request $request): JsonResponse
     {
@@ -213,7 +230,7 @@ class AuthController extends Controller
                     'required',
                     'email',
                     'max:255',
-                    Rule::unique('users', 'email')->ignore($currentUser->email, 'email'),
+                    Rule::unique('users', 'email')->ignore($currentUser->id),
                 ],
             ]);
 
@@ -228,12 +245,24 @@ class AuthController extends Controller
             }
 
             if ($updates !== []) {
-                // Keep every family membership row for this email in sync.
-                User::where('email', $currentUser->email)->update($updates);
+                $currentUser->update($updates);
+            }
+
+            $updatedUser = $currentUser->fresh();
+            $family = tenant();
+
+            if ($family instanceof Family) {
+                $role = $updatedUser->roleInFamily($family->id);
+                $updatedUser->setAttribute('role', $role);
+                $updatedUser->setAttribute('family', [
+                    'id' => $family->id,
+                    'name' => $family->name,
+                    'role' => $role,
+                ]);
             }
 
             return $this->successResponse([
-                'user' => $currentUser->fresh()->load('family:id,name'),
+                'user' => $updatedUser,
             ], 'Profile updated successfully.');
         } catch (Throwable $e) {
             return $this->handleException($e, 'Update profile failed');
@@ -313,15 +342,14 @@ class AuthController extends Controller
      * Enforces a 5-attempt limit and 15-minute expiration.
      *
      * @param  Request  $request  Expects: email, code, password, password_confirmation.
-     * @return JsonResponse 200 on success, 400 for an invalid/expired code,
-     *                      429 for too many attempts, 422 on validation errors.
+     * @return JsonResponse 200 on success, 422 on invalid/expired code or validation errors.
      */
     public function resetPassword(Request $request): JsonResponse
     {
         try {
             $validator = Validator::make($request->all(), [
                 'email' => ['required', 'email'],
-                'code' => ['required', 'string', 'size:6'],
+                'code' => ['required', 'string'],
                 'password' => ['required', 'string', 'min:8', 'confirmed'],
             ]);
 
@@ -331,60 +359,54 @@ class AuthController extends Controller
 
             $data = $validator->validated();
             $email = strtolower(trim($data['email']));
+
+            $record = DB::table('password_reset_tokens')->where('email', $email)->first();
+
+            if (! $record) {
+                return $this->errorResponse('Invalid or expired password reset code.', 400);
+            }
+
             $expires = (int) config('auth.passwords.users.expire', 15);
-
-            $result = DB::transaction(function () use ($email, $data, $expires) {
-                $record = DB::table('password_reset_tokens')
-                    ->where('email', $email)
-                    ->lockForUpdate()
-                    ->first();
-
-                if (! $record) {
-                    return $this->errorResponse('Invalid or expired password reset code.', 400);
-                }
-
-                $isExpired = Carbon::parse($record->created_at)->addMinutes($expires)->isPast();
-                if ($isExpired) {
-                    DB::table('password_reset_tokens')->where('email', $email)->delete();
-
-                    return $this->errorResponse('Invalid or expired password reset code.', 400);
-                }
-
-                if ((int) $record->attempts >= 5) {
-                    DB::table('password_reset_tokens')->where('email', $email)->delete();
-
-                    return $this->errorResponse('Too many failed attempts. Please request a new password reset code.', 429);
-                }
-
-                if (! Hash::check($data['code'], $record->token)) {
-                    DB::table('password_reset_tokens')->where('email', $email)->increment('attempts');
-
-                    return $this->errorResponse('Invalid or expired password reset code.', 400);
-                }
-
-                $users = User::where('email', $email)->get();
-
-                if ($users->isEmpty()) {
-                    DB::table('password_reset_tokens')->where('email', $email)->delete();
-
-                    return $this->errorResponse('Invalid or expired password reset code.', 400);
-                }
-
-                // Consume token atomically inside transaction before modifying users
+            if (Carbon::parse($record->created_at)->addMinutes($expires)->isPast()) {
                 DB::table('password_reset_tokens')->where('email', $email)->delete();
 
-                foreach ($users as $user) {
-                    $user->forceFill(['password' => $data['password']])->save();
-                    $user->tokens()->delete(); // log out from all devices
-                    event(new PasswordReset($user));
-                }
-
-                return null;
-            });
-
-            if ($result instanceof JsonResponse) {
-                return $result;
+                return $this->errorResponse('Invalid or expired password reset code.', 400);
             }
+
+            if ((int) ($record->attempts ?? 0) >= 5) {
+                DB::table('password_reset_tokens')->where('email', $email)->delete();
+
+                return $this->errorResponse('Too many failed attempts. Please request a new password reset code.', 429);
+            }
+
+            if (! Hash::check($data['code'], $record->token)) {
+                DB::table('password_reset_tokens')
+                    ->where('email', $email)
+                    ->increment('attempts');
+
+                return $this->errorResponse('Invalid or expired password reset code.', 400);
+            }
+
+            $user = User::where('email', $email)->first();
+
+            if (! $user) {
+                DB::table('password_reset_tokens')->where('email', $email)->delete();
+
+                return $this->errorResponse('Invalid or expired password reset code.', 400);
+            }
+
+            DB::transaction(function () use ($user, $data, $email) {
+                $user->forceFill([
+                    'password' => $data['password'],
+                ])->save();
+
+                // Revoke all Sanctum tokens upon password reset
+                $user->tokens()->delete();
+
+                event(new PasswordReset($user));
+
+                DB::table('password_reset_tokens')->where('email', $email)->delete();
+            });
 
             return $this->successResponse(null, 'Password has been reset successfully.');
         } catch (Throwable $e) {
@@ -417,16 +439,13 @@ class AuthController extends Controller
             }
 
             $currentTokenId = $currentUser->currentAccessToken()?->id;
-            $users = User::where('email', $currentUser->email)->get();
 
-            DB::transaction(function () use ($users, $data, $currentTokenId) {
-                foreach ($users as $user) {
-                    $user->forceFill(['password' => $data['password']])->save();
+            DB::transaction(function () use ($currentUser, $data, $currentTokenId) {
+                $currentUser->forceFill(['password' => $data['password']])->save();
 
-                    // Revoke other tokens, keep current device session active
-                    if ($currentTokenId) {
-                        $user->tokens()->where('id', '!=', $currentTokenId)->delete();
-                    }
+                // Revoke other tokens, keep current device session active
+                if ($currentTokenId) {
+                    $currentUser->tokens()->where('id', '!=', $currentTokenId)->delete();
                 }
             });
 

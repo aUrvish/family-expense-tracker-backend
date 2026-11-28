@@ -37,11 +37,11 @@ class ReportTest extends TestCase
         $family = Family::create(['name' => 'Sharma Household']);
 
         $anita = User::create([
-            'family_id' => $family->id,
             'name' => 'Anita',
             'email' => 'anita@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($anita->id, ['role' => 'owner']);
         $token = $anita->createToken('auth_token')->plainTextToken;
 
         $groceries = Category::create(['name' => 'Groceries', 'slug' => 'groceries', 'icon' => 'cart', 'color' => '#10B981']);
@@ -106,19 +106,19 @@ class ReportTest extends TestCase
         $family = Family::create(['name' => 'Sharma Household']);
 
         $anita = User::create([
-            'family_id' => $family->id,
             'name' => 'Anita',
             'email' => 'anita@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($anita->id, ['role' => 'owner']);
         $token = $anita->createToken('auth_token')->plainTextToken;
 
         $rakesh = User::create([
-            'family_id' => $family->id,
             'name' => 'Rakesh',
             'email' => 'rakesh@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($rakesh->id, ['role' => 'member']);
 
         $category = Category::create(['name' => 'Groceries', 'slug' => 'groceries', 'icon' => 'cart', 'color' => '#10B981']);
 
@@ -158,11 +158,11 @@ class ReportTest extends TestCase
         $family = Family::create(['name' => 'Sharma Household']);
 
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Anita',
             'email' => 'anita@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         $category = Category::create(['name' => 'Groceries', 'slug' => 'groceries', 'icon' => 'cart', 'color' => '#10B981']);

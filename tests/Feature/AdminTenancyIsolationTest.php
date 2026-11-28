@@ -25,9 +25,9 @@ test('admin model user accessing console root is redirected to families resource
 test('normal user cannot access console and is redirected to console login', function () {
     $family = Family::create(['name' => 'Smiths']);
     $user = User::factory()->create([
-        'family_id' => $family->id,
         'email' => 'regular@example.com',
     ]);
+    $family->users()->attach($user->id, ['role' => 'member']);
 
     // Normal user logged into web guard cannot access console
     $this->actingAs($user, 'web')
@@ -39,8 +39,11 @@ test('admin can view families and users lists in central context', function () {
     $familyA = Family::create(['name' => 'Family Alpha']);
     $familyB = Family::create(['name' => 'Family Beta']);
 
-    User::factory()->create(['family_id' => $familyA->id, 'email' => 'alpha@test.com']);
-    User::factory()->create(['family_id' => $familyB->id, 'email' => 'beta@test.com']);
+    $userA = User::factory()->create(['email' => 'alpha@test.com']);
+    $familyA->users()->attach($userA->id, ['role' => 'owner']);
+
+    $userB = User::factory()->create(['email' => 'beta@test.com']);
+    $familyB->users()->attach($userB->id, ['role' => 'owner']);
 
     $admin = Admin::create([
         'name' => 'Super Admin',

@@ -15,10 +15,6 @@ return new class extends Migration
             $table->integer('attempts')->default(0)->after('token');
         });
 
-        Schema::table('users', function (Blueprint $table) {
-            $table->string('role', 32)->default('member')->after('remember_token');
-        });
-
         Schema::create('family_invitations', function (Blueprint $table) {
             $table->id();
             $table->foreignUuid('family_id')->constrained('families')->cascadeOnDelete();
@@ -36,10 +32,6 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('family_invitations');
-
-        Schema::table('users', function (Blueprint $table) {
-            $table->dropColumn('role');
-        });
 
         Schema::table('password_reset_tokens', function (Blueprint $table) {
             $table->dropColumn('attempts');

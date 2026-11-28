@@ -39,16 +39,15 @@ class ApiExceptionHandlingTest extends TestCase
             'name' => 'Owner',
             'email' => 'owner@example.com',
             'password' => 'password123',
-            'family_id' => $family->id,
         ]);
-        $family->update(['owner_id' => $owner->id]);
+        $family->users()->attach($owner->id, ['role' => 'owner']);
 
         $member = User::create([
             'name' => 'Member',
             'email' => 'member@example.com',
             'password' => 'password123',
-            'family_id' => $family->id,
         ]);
+        $family->users()->attach($member->id, ['role' => 'member']);
 
         $token = $member->createToken('auth_token')->plainTextToken;
 
@@ -70,9 +69,8 @@ class ApiExceptionHandlingTest extends TestCase
             'name' => 'Owner',
             'email' => 'owner@example.com',
             'password' => 'password123',
-            'family_id' => $family->id,
         ]);
-        $family->update(['owner_id' => $user->id]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
