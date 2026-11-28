@@ -73,13 +73,6 @@ class UserResource extends Resource
                 TextInput::make('email')
                     ->label('Email Address')
                     ->readOnly(),
-                TextInput::make('family.name')
-                    ->label('Family Name')
-                    ->default('No Family (Central Admin)')
-                    ->readOnly(),
-                TextInput::make('family.id')
-                    ->label('Family UUID')
-                    ->readOnly(),
                 TextInput::make('created_at')
                     ->label('Registered At')
                     ->readOnly(),
@@ -92,7 +85,7 @@ class UserResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query) => $query->with('family'))
+            ->modifyQueryUsing(fn (Builder $query) => $query->with('families'))
             ->columns([
                 TextColumn::make('name')
                     ->label('User Name')
@@ -102,22 +95,19 @@ class UserResource extends Resource
                     ->label('Email')
                     ->searchable()
                     ->sortable(),
-                TextColumn::make('family.name')
-                    ->label('Family')
+                TextColumn::make('families.name')
+                    ->label('Families')
+                    ->badge()
                     ->searchable()
-                    ->sortable()
-                    ->default('No Family (Central Admin)'),
-                TextColumn::make('family.id')
-                    ->label('Family UUID')
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->placeholder('No Family'),
                 TextColumn::make('created_at')
                     ->label('Registered At')
                     ->dateTime()
                     ->sortable(),
             ])
             ->filters([
-                SelectFilter::make('family_id')
-                    ->relationship('family', 'name')
+                SelectFilter::make('families')
+                    ->relationship('families', 'name')
                     ->searchable()
                     ->preload()
                     ->label('Filter by Family'),

@@ -38,11 +38,11 @@ class BudgetTest extends TestCase
         $family = Family::create(['name' => 'Sharma Household']);
 
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Anita',
             'email' => 'anita@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         $groceries = Category::create(['name' => 'Groceries', 'slug' => 'groceries', 'icon' => 'cart', 'color' => '#EAB308']);
@@ -113,11 +113,11 @@ class BudgetTest extends TestCase
         $family = Family::create(['name' => 'Sharma Household']);
 
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Anita',
             'email' => 'anita@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         $category = Category::create(['name' => 'Groceries', 'slug' => 'groceries', 'icon' => 'cart', 'color' => '#10B981']);
@@ -166,11 +166,11 @@ class BudgetTest extends TestCase
         $family = Family::create(['name' => 'Sharma Household']);
 
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Anita',
             'email' => 'anita@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         $category = Category::create(['name' => 'Groceries', 'slug' => 'groceries', 'icon' => 'cart', 'color' => '#10B981']);

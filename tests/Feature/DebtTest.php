@@ -64,11 +64,11 @@ class DebtTest extends TestCase
     {
         $family = Family::create(['name' => 'Test Family']);
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         $payload = [
@@ -126,11 +126,11 @@ class DebtTest extends TestCase
     {
         $family = Family::create(['name' => 'Test Family']);
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         $payload = [
@@ -183,11 +183,11 @@ class DebtTest extends TestCase
     {
         $family = Family::create(['name' => 'Test Family']);
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         // Create lent debt
@@ -238,11 +238,11 @@ class DebtTest extends TestCase
     {
         $family = Family::create(['name' => 'Test Family']);
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         // Create borrowed debt
@@ -283,11 +283,11 @@ class DebtTest extends TestCase
     {
         $family = Family::create(['name' => 'Test Family']);
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         $debtResponse = $this->withToken($token)
@@ -337,19 +337,19 @@ class DebtTest extends TestCase
         $family = Family::create(['name' => 'Family A']);
 
         $alice = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($alice->id, ['role' => 'owner']);
         $aliceToken = $alice->createToken('auth_token')->plainTextToken;
 
         $bob = User::create([
-            'family_id' => $family->id,
             'name' => 'Bob',
             'email' => 'bob@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($bob->id, ['role' => 'member']);
 
         // 1. Shared lent debt by Bob
         $bobSharedDebt = Debt::create([
@@ -429,11 +429,11 @@ class DebtTest extends TestCase
     {
         $family = Family::create(['name' => 'Family A']);
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         $debt = Debt::create([
@@ -464,19 +464,19 @@ class DebtTest extends TestCase
         $family = Family::create(['name' => 'Family A']);
 
         $alice = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($alice->id, ['role' => 'owner']);
         $aliceToken = $alice->createToken('auth_token')->plainTextToken;
 
         $bob = User::create([
-            'family_id' => $family->id,
             'name' => 'Bob',
             'email' => 'bob@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($bob->id, ['role' => 'member']);
 
         $bobPersonalDebt = Debt::create([
             'family_id' => $family->id,
@@ -517,19 +517,19 @@ class DebtTest extends TestCase
         $family = Family::create(['name' => 'Family A']);
 
         $alice = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($alice->id, ['role' => 'owner']);
         $aliceToken = $alice->createToken('auth_token')->plainTextToken;
 
         $bob = User::create([
-            'family_id' => $family->id,
             'name' => 'Bob',
             'email' => 'bob@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($bob->id, ['role' => 'member']);
         $bobToken = $bob->createToken('auth_token')->plainTextToken;
 
         // Bob creates shared debt
@@ -562,11 +562,11 @@ class DebtTest extends TestCase
     {
         $family = Family::create(['name' => 'Test Family']);
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         // Missing required fields

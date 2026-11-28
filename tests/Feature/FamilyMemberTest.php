@@ -37,34 +37,34 @@ class FamilyMemberTest extends TestCase
         $familyB = Family::create(['name' => 'Patel Parivar']);
 
         $anita = User::create([
-            'family_id' => $familyA->id,
             'name' => 'Anita',
             'email' => 'anita@example.com',
             'password' => 'secret123',
         ]);
+        $familyA->users()->attach($anita->id, ['role' => 'owner']);
         $anitaToken = $anita->createToken('auth_token')->plainTextToken;
 
         $rakesh = User::create([
-            'family_id' => $familyA->id,
             'name' => 'Rakesh',
             'email' => 'rakesh@example.com',
             'password' => 'secret123',
         ]);
+        $familyA->users()->attach($rakesh->id, ['role' => 'member']);
 
         $dadaji = User::create([
-            'family_id' => $familyA->id,
             'name' => 'Dadaji',
             'email' => 'dadaji@example.com',
             'password' => 'secret123',
         ]);
+        $familyA->users()->attach($dadaji->id, ['role' => 'member']);
 
         // User in another family (must NOT appear)
-        User::create([
-            'family_id' => $familyB->id,
+        $otherMember = User::create([
             'name' => 'Other Member',
             'email' => 'other@example.com',
             'password' => 'secret123',
         ]);
+        $familyB->users()->attach($otherMember->id, ['role' => 'owner']);
 
         $response = $this->withToken($anitaToken)
             ->withHeader('X-Family-Id', $familyA->id)
@@ -99,11 +99,11 @@ class FamilyMemberTest extends TestCase
         $familyB = Family::create(['name' => 'Family B']);
 
         $user = User::create([
-            'family_id' => $familyA->id,
             'name' => 'Anita',
             'email' => 'anita@example.com',
             'password' => 'secret123',
         ]);
+        $familyA->users()->attach($user->id, ['role' => 'owner']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         $this->withToken($token)
@@ -117,19 +117,19 @@ class FamilyMemberTest extends TestCase
         $family = Family::create(['name' => 'Sharma Parivar']);
 
         $anita = User::create([
-            'family_id' => $family->id,
             'name' => 'Anita',
             'email' => 'anita@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($anita->id, ['role' => 'owner']);
         $token = $anita->createToken('auth_token')->plainTextToken;
 
         $rakesh = User::create([
-            'family_id' => $family->id,
             'name' => 'Rakesh',
             'email' => 'rakesh@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($rakesh->id, ['role' => 'member']);
 
         $response = $this->withToken($token)
             ->withHeader('X-Family-Id', $family->id)
@@ -153,19 +153,19 @@ class FamilyMemberTest extends TestCase
         $familyB = Family::create(['name' => 'Family B']);
 
         $anita = User::create([
-            'family_id' => $familyA->id,
             'name' => 'Anita',
             'email' => 'anita@example.com',
             'password' => 'secret123',
         ]);
+        $familyA->users()->attach($anita->id, ['role' => 'owner']);
         $token = $anita->createToken('auth_token')->plainTextToken;
 
         $otherUser = User::create([
-            'family_id' => $familyB->id,
             'name' => 'Other',
             'email' => 'other@example.com',
             'password' => 'secret123',
         ]);
+        $familyB->users()->attach($otherUser->id, ['role' => 'owner']);
 
         $this->withToken($token)
             ->withHeader('X-Family-Id', $familyA->id)
@@ -180,11 +180,11 @@ class FamilyMemberTest extends TestCase
         $family = Family::create(['name' => 'Family A']);
 
         $anita = User::create([
-            'family_id' => $family->id,
             'name' => 'Anita',
             'email' => 'anita@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($anita->id, ['role' => 'owner']);
         $token = $anita->createToken('auth_token')->plainTextToken;
 
         $this->withToken($token)

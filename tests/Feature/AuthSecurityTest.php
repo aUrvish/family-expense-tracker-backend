@@ -34,12 +34,11 @@ class AuthSecurityTest extends TestCase
         ]);
 
         $this->user = User::create([
-            'family_id' => $this->family->id,
             'name' => 'Alice Admin',
             'email' => 'alice.security@example.com',
             'password' => 'SecurePass123!',
-            'role' => 'owner',
         ]);
+        $this->family->users()->attach($this->user->id, ['role' => 'owner']);
 
         $this->token = $this->user->createToken('auth-token')->plainTextToken;
     }
@@ -250,8 +249,8 @@ class AuthSecurityTest extends TestCase
         ]);
 
         $regRes1->assertStatus(201)
-            ->assertJsonPath('data.user.family_id', $this->family->id)
-            ->assertJsonPath('data.user.role', 'member');
+            ->assertJsonPath('data.families.0.id', $this->family->id)
+            ->assertJsonPath('data.families.0.pivot.role', 'member');
 
         // 3. Multiple users can join via the same invitation without manual approval -> succeeds
         $regRes2 = $this->postJson('/api/register', [
@@ -263,8 +262,8 @@ class AuthSecurityTest extends TestCase
         ]);
 
         $regRes2->assertStatus(201)
-            ->assertJsonPath('data.user.family_id', $this->family->id)
-            ->assertJsonPath('data.user.role', 'member');
+            ->assertJsonPath('data.families.0.id', $this->family->id)
+            ->assertJsonPath('data.families.0.pivot.role', 'member');
     }
 
     public function test_removed_invitation_management_routes_are_unavailable(): void
@@ -372,12 +371,11 @@ class AuthSecurityTest extends TestCase
     public function test_only_family_owner_can_manage_invitations(): void
     {
         $regularMember = User::create([
-            'family_id' => $this->family->id,
             'name' => 'Regular Member',
             'email' => 'regular@example.com',
             'password' => 'Password123!',
-            'role' => 'member',
         ]);
+        $this->family->users()->attach($regularMember->id, ['role' => 'member']);
         $memberToken = $regularMember->createToken('member-token')->plainTextToken;
 
         // Attempt to create invitation as regular member -> 403

@@ -1033,6 +1033,73 @@
       "name": "Dashboard & Family",
       "item": [
         {
+          "name": "List families",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/families",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "families"
+              ]
+            },
+            "description": "Returns all families the authenticated user belongs to along with their role in each family."
+          }
+        },
+        {
+          "name": "Create or join family",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Family-Id",
+                "value": "{{familyId}}",
+                "description": "Family UUID returned by registration/login."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/families",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "families"
+              ]
+            },
+            "description": "Creates a new family as owner (send {\"name\": \"...\"}) or joins an existing family as member (send {\"invite_code\": \"...\"}).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My Second Family\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
           "name": "Get dashboard",
           "request": {
             "method": "GET",

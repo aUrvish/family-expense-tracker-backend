@@ -68,11 +68,11 @@ class TransactionTest extends TestCase
     {
         $family = Family::create(['name' => 'Test Family']);
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         $category = Category::create([
@@ -120,11 +120,11 @@ class TransactionTest extends TestCase
     {
         $family = Family::create(['name' => 'Test Family']);
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         $category = Category::create([
@@ -168,11 +168,11 @@ class TransactionTest extends TestCase
     {
         $family = Family::create(['name' => 'Test Family']);
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         $groceryCategory = Category::create([
@@ -240,11 +240,11 @@ class TransactionTest extends TestCase
         $familyB = Family::create(['name' => 'Family B']);
 
         $userA = User::create([
-            'family_id' => $familyA->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $familyA->users()->attach($userA->id, ['role' => 'owner']);
         $tokenA = $userA->createToken('auth_token')->plainTextToken;
 
         $category = Category::create([
@@ -283,11 +283,11 @@ class TransactionTest extends TestCase
     {
         $family = Family::create(['name' => 'Test Family']);
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         // 1. Missing required fields (type, amount, and category_id)
@@ -338,11 +338,11 @@ class TransactionTest extends TestCase
     {
         $family = Family::create(['name' => 'Test Family']);
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         $category = Category::create([
@@ -374,11 +374,11 @@ class TransactionTest extends TestCase
     {
         $family = Family::create(['name' => 'Test Family']);
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         $category = Category::create([
@@ -415,11 +415,11 @@ class TransactionTest extends TestCase
     {
         $family = Family::create(['name' => 'Test Family']);
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         $category = Category::create([
@@ -464,18 +464,18 @@ class TransactionTest extends TestCase
         $family = Family::create(['name' => 'Test Family']);
 
         $alice = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($alice->id, ['role' => 'owner']);
 
         $bob = User::create([
-            'family_id' => $family->id,
             'name' => 'Bob',
             'email' => 'bob@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($bob->id, ['role' => 'member']);
         $bobToken = $bob->createToken('auth_token')->plainTextToken;
 
         $category = Category::create([
@@ -520,11 +520,11 @@ class TransactionTest extends TestCase
     {
         $family = Family::create(['name' => 'Test Family']);
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         $category = Category::create([
@@ -552,18 +552,18 @@ class TransactionTest extends TestCase
         $family = Family::create(['name' => 'Test Family']);
 
         $alice = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($alice->id, ['role' => 'owner']);
 
         $bob = User::create([
-            'family_id' => $family->id,
             'name' => 'Bob',
             'email' => 'bob@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($bob->id, ['role' => 'member']);
 
         $category = Category::create([
             'name' => 'General',
@@ -631,19 +631,19 @@ class TransactionTest extends TestCase
         $familyB = Family::create(['name' => 'Family B']);
 
         $alice = User::create([
-            'family_id' => $familyA->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $familyA->users()->attach($alice->id, ['role' => 'owner']);
         $aliceToken = $alice->createToken('auth_token')->plainTextToken;
 
         $bob = User::create([
-            'family_id' => $familyA->id,
             'name' => 'Bob',
             'email' => 'bob@example.com',
             'password' => 'secret123',
         ]);
+        $familyA->users()->attach($bob->id, ['role' => 'member']);
 
         $category = Category::create([
             'name' => 'Food',
@@ -721,11 +721,11 @@ class TransactionTest extends TestCase
     {
         $family = Family::create(['name' => 'Family A']);
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         $foodCategory = Category::create([
@@ -817,11 +817,11 @@ class TransactionTest extends TestCase
     {
         $family = Family::create(['name' => 'Family A']);
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         $category = Category::create([
@@ -859,19 +859,19 @@ class TransactionTest extends TestCase
         $family = Family::create(['name' => 'Family A']);
 
         $alice = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($alice->id, ['role' => 'owner']);
         $aliceToken = $alice->createToken('auth_token')->plainTextToken;
 
         $bob = User::create([
-            'family_id' => $family->id,
             'name' => 'Bob',
             'email' => 'bob@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($bob->id, ['role' => 'member']);
 
         $category = Category::create([
             'name' => 'Shopping',
@@ -904,11 +904,11 @@ class TransactionTest extends TestCase
     {
         $family = Family::create(['name' => 'Family A']);
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
         $token = $user->createToken('auth_token')->plainTextToken;
 
         $category = Category::create([
@@ -946,19 +946,19 @@ class TransactionTest extends TestCase
         $family = Family::create(['name' => 'Family A']);
 
         $alice = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($alice->id, ['role' => 'owner']);
         $aliceToken = $alice->createToken('auth_token')->plainTextToken;
 
         $bob = User::create([
-            'family_id' => $family->id,
             'name' => 'Bob',
             'email' => 'bob@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($bob->id, ['role' => 'member']);
 
         $category = Category::create([
             'name' => 'Shopping',
@@ -995,19 +995,19 @@ class TransactionTest extends TestCase
         $family = Family::create(['name' => 'Family A']);
 
         $alice = User::create([
-            'family_id' => $family->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($alice->id, ['role' => 'owner']);
         $aliceToken = $alice->createToken('auth_token')->plainTextToken;
 
         $bob = User::create([
-            'family_id' => $family->id,
             'name' => 'Bob',
             'email' => 'bob@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($bob->id, ['role' => 'member']);
 
         $category = Category::create([
             'name' => 'Groceries',
@@ -1047,11 +1047,11 @@ class TransactionTest extends TestCase
         $familyB = Family::create(['name' => 'Family B']);
 
         $alice = User::create([
-            'family_id' => $familyA->id,
             'name' => 'Alice',
             'email' => 'alice@example.com',
             'password' => 'secret123',
         ]);
+        $familyA->users()->attach($alice->id, ['role' => 'owner']);
         $aliceToken = $alice->createToken('auth_token')->plainTextToken;
 
         $category = Category::create([

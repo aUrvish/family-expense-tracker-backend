@@ -60,33 +60,33 @@ class DashboardTest extends TestCase
         ]);
 
         $anita = User::create([
-            'family_id' => $family->id,
             'name' => 'Anita',
             'email' => 'anita@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($anita->id, ['role' => 'owner']);
         $anitaToken = $anita->createToken('auth_token')->plainTextToken;
 
         $rakesh = User::create([
-            'family_id' => $family->id,
             'name' => 'Rakesh',
             'email' => 'rakesh@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($rakesh->id, ['role' => 'member']);
 
         $dadaji = User::create([
-            'family_id' => $family->id,
             'name' => 'Dadaji',
             'email' => 'dadaji@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($dadaji->id, ['role' => 'member']);
 
         $meera = User::create([
-            'family_id' => $family->id,
             'name' => 'Meera',
             'email' => 'meera@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($meera->id, ['role' => 'member']);
 
         $groceriesCategory = Category::where('slug', 'groceries')->first();
         $shoppingCategory = Category::where('slug', 'shopping')->first();
@@ -207,19 +207,19 @@ class DashboardTest extends TestCase
         $family = Family::create(['name' => 'Sharma Parivar']);
 
         $anita = User::create([
-            'family_id' => $family->id,
             'name' => 'Anita',
             'email' => 'anita@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($anita->id, ['role' => 'owner']);
         $anitaToken = $anita->createToken('auth_token')->plainTextToken;
 
         $rakesh = User::create([
-            'family_id' => $family->id,
             'name' => 'Rakesh',
             'email' => 'rakesh@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($rakesh->id, ['role' => 'member']);
 
         $category = Category::where('slug', 'shopping')->first();
 
@@ -252,11 +252,11 @@ class DashboardTest extends TestCase
         $family = Family::create(['name' => 'Sharma Parivar']);
 
         $anita = User::create([
-            'family_id' => $family->id,
             'name' => 'Anita',
             'email' => 'anita@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($anita->id, ['role' => 'owner']);
         $anitaToken = $anita->createToken('auth_token')->plainTextToken;
 
         $category = Category::where('slug', 'groceries')->first();

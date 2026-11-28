@@ -58,11 +58,11 @@ class CurrencyReviewRegressionTest extends TestCase
         ]);
 
         $this->user = User::create([
-            'family_id' => $this->family->id,
             'name' => 'John Doe',
             'email' => 'john@example.com',
             'password' => 'secret123',
         ]);
+        $this->family->users()->attach($this->user->id, ['role' => 'owner']);
 
         $this->token = $this->user->createToken('auth_token')->plainTextToken;
 

@@ -39,11 +39,11 @@ class CategoryTest extends TestCase
         ]);
 
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Test User',
             'email' => 'user@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
@@ -97,11 +97,11 @@ class CategoryTest extends TestCase
 
         $family = Family::create(['name' => 'Smith Family']);
         $user = User::create([
-            'family_id' => $family->id,
             'name' => 'Bob Smith',
             'email' => 'bob@example.com',
             'password' => 'secret123',
         ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
 
         $token = $user->createToken('auth_token')->plainTextToken;
 

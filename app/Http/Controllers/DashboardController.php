@@ -63,7 +63,7 @@ class DashboardController extends Controller
 
             // 2. Household spend by member
             $membersSpend = [];
-            $familyMembers = User::where('family_id', $familyId)->get();
+            $familyMembers = tenant()->users()->get();
 
             foreach ($familyMembers as $member) {
                 $memberTxs = Transaction::where('family_id', $familyId)

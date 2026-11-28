@@ -33,6 +33,10 @@ Route::controller(AuthController::class)
     });
 
 Route::middleware(['auth:sanctum', IdentifyFamily::class])->group(function () {
+    Route::controller(FamilyController::class)->prefix('families')->group(function () {
+        Route::get('/', 'index')->name('families.index');
+        Route::post('/', 'store')->name('families.store');
+    });
     Route::controller(TransactionController::class)->group(function () {
         Route::get('/transactions', 'index')->name('transactions.index');
 
