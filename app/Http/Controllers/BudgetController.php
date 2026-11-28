@@ -156,6 +156,7 @@ class BudgetController extends Controller
                     'integer',
                     Rule::exists('categories', 'id')->where(function ($query) use ($familyId) {
                         $query->whereNull('deleted_at')
+                            ->where('type', 'expense')
                             ->where(function ($q) use ($familyId) {
                                 $q->whereNull('family_id')->orWhere('family_id', $familyId);
                             });

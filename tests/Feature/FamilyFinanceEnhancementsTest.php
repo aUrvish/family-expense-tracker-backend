@@ -137,6 +137,7 @@ class FamilyFinanceEnhancementsTest extends TestCase
             ->withHeader('X-Family-Id', $this->family->id)
             ->postJson('/api/category/save', [
                 'name' => 'Vacation & Trips',
+                'type' => 'expense',
                 'icon' => 'plane',
                 'color' => '#3B82F6',
             ]);
@@ -564,6 +565,7 @@ class FamilyFinanceEnhancementsTest extends TestCase
             ->withHeader('X-Family-Id', $this->family->id)
             ->postJson('/api/category/save', [
                 'name' => 'Pet Care',
+                'type' => 'expense',
             ]);
         $cat1Id = $create1->json('data.id');
 
@@ -578,6 +580,7 @@ class FamilyFinanceEnhancementsTest extends TestCase
             ->withHeader('X-Family-Id', $this->family->id)
             ->postJson('/api/category/save', [
                 'name' => 'Pet Care',
+                'type' => 'expense',
             ]);
         $create2->assertStatus(201);
 

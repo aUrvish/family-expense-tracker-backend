@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,6 +18,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $family_id
  * @property string $name
  * @property string $slug
+ * @property string $type 'expense' or 'income'
  * @property string|null $icon
  * @property string|null $color
  * @property Carbon|null $created_at
@@ -26,7 +28,7 @@ use Illuminate\Support\Carbon;
  * @property-read Collection<int, Transaction> $transactions
  * @property-read Collection<int, Budget> $budgets
  */
-#[Fillable(['family_id', 'name', 'slug', 'icon', 'color'])]
+#[Fillable(['family_id', 'name', 'slug', 'type', 'icon', 'color'])]
 class Category extends Model
 {
     use SoftDeletes;
@@ -43,6 +45,30 @@ class Category extends Model
             'updated_at' => 'datetime',
             'deleted_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Scope query to categories of the given type ('expense' or 'income').
+     */
+    public function scopeOfType(Builder $query, string $type): Builder
+    {
+        return $query->where('type', $type);
+    }
+
+    /**
+     * Scope query to expense categories only.
+     */
+    public function scopeExpenses(Builder $query): Builder
+    {
+        return $query->where('type', 'expense');
+    }
+
+    /**
+     * Scope query to income categories only.
+     */
+    public function scopeIncome(Builder $query): Builder
+    {
+        return $query->where('type', 'income');
     }
 
     /**

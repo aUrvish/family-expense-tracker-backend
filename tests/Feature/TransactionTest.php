@@ -130,6 +130,7 @@ class TransactionTest extends TestCase
         $category = Category::create([
             'name' => 'Salary',
             'slug' => 'salary',
+            'type' => 'income',
             'icon' => 'banknotes',
             'color' => '#22C55E',
         ]);
@@ -1080,5 +1081,67 @@ class TransactionTest extends TestCase
             ->withHeader('X-Family-Id', $familyA->id)
             ->deleteJson('/api/transaction/'.$familyBTx->id)
             ->assertStatus(404);
+    }
+
+    public function test_transaction_category_type_must_match_transaction_type(): void
+    {
+        $family = Family::create(['name' => 'Type Match Family']);
+        $user = User::create([
+            'name' => 'Alice',
+            'email' => 'alice.typematch@example.com',
+            'password' => 'secret123',
+        ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        $expenseCategory = Category::create([
+            'name' => 'Fuel',
+            'slug' => 'fuel-type-test',
+            'type' => 'expense',
+            'icon' => 'fuel',
+            'color' => '#EC4899',
+        ]);
+        $incomeCategory = Category::create([
+            'name' => 'Salary',
+            'slug' => 'salary-type-test',
+            'type' => 'income',
+            'icon' => 'briefcase',
+            'color' => '#10B981',
+        ]);
+
+        // 1. Income with income category -> 201
+        $this->withToken($token)
+            ->withHeader('X-Family-Id', $family->id)
+            ->postJson('/api/transaction/save', [
+                'type' => 'income',
+                'amount' => 5000,
+                'category_id' => $incomeCategory->id,
+                'date' => '2026-11-28',
+            ])
+            ->assertStatus(201);
+
+        // 2. Income with expense category -> 422
+        $this->withToken($token)
+            ->withHeader('X-Family-Id', $family->id)
+            ->postJson('/api/transaction/save', [
+                'type' => 'income',
+                'amount' => 500,
+                'category_id' => $expenseCategory->id,
+                'date' => '2026-11-28',
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['category_id']);
+
+        // 3. Expense with income category -> 422
+        $this->withToken($token)
+            ->withHeader('X-Family-Id', $family->id)
+            ->postJson('/api/transaction/save', [
+                'type' => 'expense',
+                'amount' => 100,
+                'category_id' => $incomeCategory->id,
+                'date' => '2026-11-28',
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['category_id']);
     }
 }

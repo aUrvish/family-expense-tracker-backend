@@ -193,4 +193,37 @@ class BudgetTest extends TestCase
 
         $this->assertSoftDeleted('budgets', ['id' => $budget->id]);
     }
+
+    public function test_budget_with_income_category_is_rejected(): void
+    {
+        $family = Family::create(['name' => 'Budget Income Reject Family']);
+
+        $user = User::create([
+            'name' => 'Anita',
+            'email' => 'anita.budget@example.com',
+            'password' => 'secret123',
+        ]);
+        $family->users()->attach($user->id, ['role' => 'owner']);
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        $incomeCategory = Category::create([
+            'name' => 'Salary',
+            'slug' => 'salary-budget-test',
+            'type' => 'income',
+            'icon' => 'briefcase',
+            'color' => '#10B981',
+        ]);
+
+        $response = $this->withToken($token)
+            ->withHeader('X-Family-Id', $family->id)
+            ->postJson('/api/budget/save', [
+                'category_id' => $incomeCategory->id,
+                'amount' => 500,
+                'month' => 11,
+                'year' => 2026,
+            ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['category_id']);
+    }
 }
