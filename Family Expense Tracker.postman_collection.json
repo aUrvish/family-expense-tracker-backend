@@ -613,12 +613,12 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/transactions?type=expense&visibility=shared&per_page=15",
+              "raw": "{{baseUrl}}/transaction?type=expense&visibility=shared&per_page=15",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "transactions"
+                "transaction"
               ],
               "query": [
                 {
@@ -639,34 +639,6 @@
               ]
             },
             "description": "List transactions. Optional filters: type, user_id, category_id, visibility, start_date, end_date, month, year, search, per_page."
-          }
-        },
-        {
-          "name": "List transactions (singular alias)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "X-Family-Id",
-                "value": "{{familyId}}",
-                "description": "Family UUID returned by registration/login."
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/transaction/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "transaction",
-                ""
-              ]
-            },
-            "description": "Alias for transaction listing."
           }
         },
         {
@@ -816,12 +788,12 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/debts?type=lent&status=pending&per_page=15",
+              "raw": "{{baseUrl}}/debt?type=lent&status=pending&per_page=15",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "debts"
+                "debt"
               ],
               "query": [
                 {
@@ -842,34 +814,6 @@
               ]
             },
             "description": "Optional filters: type, status, visibility, search, start_date, end_date, due_date, per_page."
-          }
-        },
-        {
-          "name": "List debts (singular alias)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "X-Family-Id",
-                "value": "{{familyId}}",
-                "description": "Family UUID returned by registration/login."
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/debt/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "debt",
-                ""
-              ]
-            },
-            "description": "Alias for debt listing."
           }
         },
         {
@@ -1346,12 +1290,12 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/budgets?month={{month}}&year={{year}}",
+              "raw": "{{baseUrl}}/budget?month={{month}}&year={{year}}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "budgets"
+                "budget"
               ],
               "query": [
                 {

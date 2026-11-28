@@ -621,7 +621,7 @@ class TransactionTest extends TestCase
 
     public function test_unauthenticated_user_cannot_access_index_show_or_delete(): void
     {
-        $this->getJson('/api/transactions')->assertStatus(401);
+        $this->getJson('/api/transaction')->assertStatus(401);
         $this->getJson('/api/transaction/1')->assertStatus(401);
         $this->deleteJson('/api/transaction/1')->assertStatus(401);
     }
@@ -703,7 +703,7 @@ class TransactionTest extends TestCase
 
         $response = $this->withToken($aliceToken)
             ->withHeader('X-Family-Id', $familyA->id)
-            ->getJson('/api/transactions');
+            ->getJson('/api/transaction');
 
         $response->assertStatus(200)
             ->assertJsonPath('status', true)
@@ -768,7 +768,7 @@ class TransactionTest extends TestCase
         // Filter by type=income
         $incomeResponse = $this->withToken($token)
             ->withHeader('X-Family-Id', $family->id)
-            ->getJson('/api/transactions?type=income');
+            ->getJson('/api/transaction?type=income');
         $incomeResponse->assertStatus(200)
             ->assertJsonPath('data.total', 1)
             ->assertJsonPath('data.data.0.type', 'income');
@@ -776,7 +776,7 @@ class TransactionTest extends TestCase
         // Filter by type=expense (or expence / expenses)
         $expenseResponse = $this->withToken($token)
             ->withHeader('X-Family-Id', $family->id)
-            ->getJson('/api/transactions?type=expense');
+            ->getJson('/api/transaction?type=expense');
         $expenseResponse->assertStatus(200)
             ->assertJsonPath('data.total', 1)
             ->assertJsonPath('data.data.0.type', 'expense');
@@ -784,7 +784,7 @@ class TransactionTest extends TestCase
         // Filter by category_id
         $categoryResponse = $this->withToken($token)
             ->withHeader('X-Family-Id', $family->id)
-            ->getJson('/api/transactions?category_id='.$foodCategory->id);
+            ->getJson('/api/transaction?category_id='.$foodCategory->id);
         $categoryResponse->assertStatus(200)
             ->assertJsonPath('data.total', 1)
             ->assertJsonPath('data.data.0.category_id', $foodCategory->id);
@@ -792,7 +792,7 @@ class TransactionTest extends TestCase
         // Filter by visibility=personal
         $visibilityResponse = $this->withToken($token)
             ->withHeader('X-Family-Id', $family->id)
-            ->getJson('/api/transactions?visibility=personal');
+            ->getJson('/api/transaction?visibility=personal');
         $visibilityResponse->assertStatus(200)
             ->assertJsonPath('data.total', 1)
             ->assertJsonPath('data.data.0.visibility', 'personal');
@@ -800,7 +800,7 @@ class TransactionTest extends TestCase
         // Filter by search
         $searchResponse = $this->withToken($token)
             ->withHeader('X-Family-Id', $family->id)
-            ->getJson('/api/transactions?search=Supermarket');
+            ->getJson('/api/transaction?search=Supermarket');
         $searchResponse->assertStatus(200)
             ->assertJsonPath('data.total', 1)
             ->assertJsonPath('data.data.0.note', 'Supermarket shopping');
@@ -808,7 +808,7 @@ class TransactionTest extends TestCase
         // Filter by date range
         $dateResponse = $this->withToken($token)
             ->withHeader('X-Family-Id', $family->id)
-            ->getJson('/api/transactions?start_date=2026-11-02&end_date=2026-11-06');
+            ->getJson('/api/transaction?start_date=2026-11-02&end_date=2026-11-06');
         $dateResponse->assertStatus(200)
             ->assertJsonPath('data.total', 1)
             ->assertJsonPath('data.data.0.date', Carbon::parse('2026-11-05', 'UTC')->timestamp);

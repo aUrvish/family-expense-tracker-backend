@@ -318,7 +318,7 @@ class FamilyFinanceEnhancementsTest extends TestCase
         // Excluded from standard index
         $indexResponse = $this->withToken($this->token)
             ->withHeader('X-Family-Id', $this->family->id)
-            ->getJson('/api/transactions');
+            ->getJson('/api/transaction');
 
         $indexResponse->assertStatus(200)
             ->assertJsonMissing(['id' => $txId]);

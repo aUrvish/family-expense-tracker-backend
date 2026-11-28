@@ -31,7 +31,7 @@ class DebtTest extends TestCase
 
     public function test_unauthenticated_user_cannot_access_debt_endpoints(): void
     {
-        $this->getJson('/api/debts')->assertStatus(401);
+        $this->getJson('/api/debt')->assertStatus(401);
         $this->postJson('/api/debt/save', [])->assertStatus(401);
         $this->getJson('/api/debt/1')->assertStatus(401);
         $this->postJson('/api/debt/1/settle')->assertStatus(401);
@@ -48,7 +48,7 @@ class DebtTest extends TestCase
         $token = $user->createToken('auth_token')->plainTextToken;
 
         $this->withToken($token)
-            ->getJson('/api/debts')
+            ->getJson('/api/debt')
             ->assertStatus(400);
 
         $this->withToken($token)
@@ -390,7 +390,7 @@ class DebtTest extends TestCase
         // Alice fetches all debts visible to her
         $response = $this->withToken($aliceToken)
             ->withHeader('X-Family-Id', $family->id)
-            ->getJson('/api/debts');
+            ->getJson('/api/debt');
 
         $response->assertStatus(200)
             ->assertJsonPath('status', true)
@@ -403,7 +403,7 @@ class DebtTest extends TestCase
         // Filter by type=lent
         $lentResponse = $this->withToken($aliceToken)
             ->withHeader('X-Family-Id', $family->id)
-            ->getJson('/api/debts?type=lent');
+            ->getJson('/api/debt?type=lent');
         $lentResponse->assertStatus(200)
             ->assertJsonPath('data.total', 1)
             ->assertJsonPath('data.data.0.type', 'lent');
@@ -411,7 +411,7 @@ class DebtTest extends TestCase
         // Filter by status=settled
         $settledResponse = $this->withToken($aliceToken)
             ->withHeader('X-Family-Id', $family->id)
-            ->getJson('/api/debts?status=settled');
+            ->getJson('/api/debt?status=settled');
         $settledResponse->assertStatus(200)
             ->assertJsonPath('data.total', 1)
             ->assertJsonPath('data.data.0.status', 'settled');
@@ -419,7 +419,7 @@ class DebtTest extends TestCase
         // Search by person_name
         $searchResponse = $this->withToken($aliceToken)
             ->withHeader('X-Family-Id', $family->id)
-            ->getJson('/api/debts?search=Charlie');
+            ->getJson('/api/debt?search=Charlie');
         $searchResponse->assertStatus(200)
             ->assertJsonPath('data.total', 1)
             ->assertJsonPath('data.data.0.person_name', 'Cousin Charlie');

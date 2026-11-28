@@ -16,7 +16,7 @@ class BudgetTest extends TestCase
 
     public function test_unauthenticated_user_cannot_access_budgets(): void
     {
-        $this->getJson('/api/budgets')->assertStatus(401);
+        $this->getJson('/api/budget')->assertStatus(401);
     }
 
     public function test_user_cannot_access_budgets_without_family_header(): void
@@ -29,7 +29,7 @@ class BudgetTest extends TestCase
         $token = $user->createToken('auth_token')->plainTextToken;
 
         $this->withToken($token)
-            ->getJson('/api/budgets')
+            ->getJson('/api/budget')
             ->assertStatus(400);
     }
 
@@ -72,7 +72,7 @@ class BudgetTest extends TestCase
 
         $response = $this->withToken($token)
             ->withHeader('X-Family-Id', $family->id)
-            ->getJson("/api/budgets?month={$month}&year={$year}");
+            ->getJson("/api/budget?month={$month}&year={$year}");
 
         $response->assertStatus(200)
             ->assertJsonPath('status', true)

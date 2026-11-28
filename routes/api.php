@@ -37,29 +37,21 @@ Route::middleware(['auth:sanctum', IdentifyFamily::class])->group(function () {
         Route::get('/', 'index')->name('families.index');
         Route::post('/', 'store')->name('families.store');
     });
-    Route::controller(TransactionController::class)->group(function () {
-        Route::get('/transactions', 'index')->name('transactions.index');
-
-        Route::prefix('transaction')->group(function () {
-            Route::get('/', 'index');
-            Route::post('/save', 'save')->name('transactions.save');
-            Route::get('/{id}', 'show')->name('transactions.show');
-            Route::delete('/{id}', 'destroy')->name('transactions.destroy');
-            Route::post('/{id}/restore', 'restore')->name('transactions.restore');
-        });
+    Route::controller(TransactionController::class)->prefix('transaction')->group(function () {
+        Route::get('/', 'index')->name('transactions.index');
+        Route::post('/save', 'save')->name('transactions.save');
+        Route::get('/{id}', 'show')->name('transactions.show');
+        Route::delete('/{id}', 'destroy')->name('transactions.destroy');
+        Route::post('/{id}/restore', 'restore')->name('transactions.restore');
     });
 
-    Route::controller(DebtController::class)->group(function () {
-        Route::get('/debts', 'index')->name('debts.index');
-
-        Route::prefix('debt')->group(function () {
-            Route::get('/', 'index');
-            Route::post('/save', 'save')->name('debts.save');
-            Route::get('/{id}', 'show')->name('debts.show');
-            Route::post('/{id}/settle', 'settle')->name('debts.settle');
-            Route::delete('/{id}', 'destroy')->name('debts.destroy');
-            Route::post('/{id}/restore', 'restore')->name('debts.restore');
-        });
+    Route::controller(DebtController::class)->prefix('debt')->group(function () {
+        Route::get('/', 'index')->name('debts.index');
+        Route::post('/save', 'save')->name('debts.save');
+        Route::get('/{id}', 'show')->name('debts.show');
+        Route::post('/{id}/settle', 'settle')->name('debts.settle');
+        Route::delete('/{id}', 'destroy')->name('debts.destroy');
+        Route::post('/{id}/restore', 'restore')->name('debts.restore');
     });
 
     Route::controller(CategoryController::class)->prefix('category')->group(function () {
@@ -94,12 +86,10 @@ Route::middleware(['auth:sanctum', IdentifyFamily::class])->group(function () {
         Route::get('/reports/export', 'export')->name('reports.export');
     });
 
-    Route::controller(BudgetController::class)->group(function () {
-        Route::get('/budgets', 'index')->name('budgets.index');
-        Route::prefix('budget')->group(function () {
-            Route::post('/save', 'save')->name('budgets.save');
-            Route::delete('/{id}', 'destroy')->name('budgets.destroy');
-            Route::post('/{id}/restore', 'restore')->name('budgets.restore');
-        });
+    Route::controller(BudgetController::class)->prefix('budget')->group(function () {
+        Route::get('/', 'index')->name('budgets.index');
+        Route::post('/save', 'save')->name('budgets.save');
+        Route::delete('/{id}', 'destroy')->name('budgets.destroy');
+        Route::post('/{id}/restore', 'restore')->name('budgets.restore');
     });
 });

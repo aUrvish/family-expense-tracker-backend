@@ -226,7 +226,7 @@ class CurrencyReviewRegressionTest extends TestCase
 
         $response = $this->withToken($this->token)
             ->withHeader('X-Family-Id', $this->family->id)
-            ->getJson('/api/transactions');
+            ->getJson('/api/transaction');
 
         $response->assertStatus(200)
             ->assertJsonPath('data.data.0.display.currency', 'EUR')

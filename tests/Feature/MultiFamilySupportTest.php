@@ -230,7 +230,7 @@ class MultiFamilySupportTest extends TestCase
 
         $this->withToken($token)
             ->withHeader('X-Family-Id', $familyB->id)
-            ->getJson('/api/transactions')
+            ->getJson('/api/transaction')
             ->assertStatus(200)
             ->assertJsonCount(0, 'data.data');
     }
