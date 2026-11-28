@@ -422,9 +422,17 @@
               ],
               "path": [
                 "category"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "expense",
+                  "disabled": true,
+                  "description": "Optional filter: expense or income."
+                }
               ]
             },
-            "description": "List all standard system categories and custom categories for the family."
+            "description": "List all standard system categories and custom categories for the family. Optional query param: type (expense or income)."
           }
         },
         {
@@ -448,7 +456,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Vacation & Trips\",\n  \"icon\": \"plane\",\n  \"color\": \"#3B82F6\"\n}"
+              "raw": "{\n  \"name\": \"Vacation & Trips\",\n  \"type\": \"expense\",\n  \"icon\": \"plane\",\n  \"color\": \"#3B82F6\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/category/save",
@@ -512,7 +520,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": 1,\n  \"name\": \"Vacation & Trips Updated\",\n  \"icon\": \"plane\",\n  \"color\": \"#2563EB\"\n}"
+              "raw": "{\n  \"id\": 1,\n  \"name\": \"Vacation & Trips Updated\",\n  \"type\": \"expense\",\n  \"icon\": \"plane\",\n  \"color\": \"#2563EB\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/category/save",
@@ -524,7 +532,7 @@
                 "save"
               ]
             },
-            "description": "Update an existing family custom category (system categories cannot be edited)."
+            "description": "Update an existing family custom category (system categories cannot be edited; type cannot be changed if already used by transactions or budgets)."
           }
         },
         {
@@ -1390,7 +1398,7 @@
                 "save"
               ]
             },
-            "description": "Create or upsert a category budget. Include id to update an existing budget.",
+            "description": "Create or upsert a category budget (category_id must be an expense category). Include id to update an existing budget.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"category_id\": 1,\n  \"amount\": 1500,\n  \"month\": 11,\n  \"year\": 2026\n}",

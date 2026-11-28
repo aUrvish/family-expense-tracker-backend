@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Category;
 use App\Models\RecurringTransaction;
 use App\Models\Transaction;
 use App\Services\CurrencyService;
@@ -122,6 +123,16 @@ class RecurringTransactionController extends Controller
                     return $this->errorResponse('Recurring transaction not found.', 404);
                 }
 
+                $effectiveCategoryId = $validated['category_id'] ?? $recurring->category_id;
+                $effectiveType = $validated['type'] ?? $recurring->type;
+                $category = Category::find($effectiveCategoryId);
+
+                if (! $category || $category->type !== $effectiveType) {
+                    return $this->errorResponse('Validation error.', 422, [
+                        'category_id' => ['The selected category type does not match the recurring transaction type.'],
+                    ]);
+                }
+
                 $updateData = [];
 
                 if (isset($validated['category_id'])) {
@@ -187,6 +198,14 @@ class RecurringTransactionController extends Controller
             }
 
             // Create new recurring template
+            $category = Category::find($validated['category_id']);
+
+            if (! $category || $category->type !== $validated['type']) {
+                return $this->errorResponse('Validation error.', 422, [
+                    'category_id' => ['The selected category type does not match the recurring transaction type.'],
+                ]);
+            }
+
             $startDate = Carbon::parse($validated['start_date'])->toDateString();
             $endDate = ! empty($validated['end_date']) ? Carbon::parse($validated['end_date'])->toDateString() : null;
             $rawAmount = (float) $validated['amount'];

@@ -105,11 +105,15 @@ class TransactionController extends Controller
                 'category_id' => [
                     'required',
                     'integer',
-                    Rule::exists('categories', 'id')->where(function ($query) use ($familyId) {
+                    Rule::exists('categories', 'id')->where(function ($query) use ($familyId, $request) {
                         $query->whereNull('deleted_at')
                             ->where(function ($q) use ($familyId) {
                                 $q->whereNull('family_id')->orWhere('family_id', $familyId);
                             });
+
+                        if (in_array($request->input('type'), ['expense', 'income'], true)) {
+                            $query->where('type', $request->input('type'));
+                        }
                     }),
                 ],
                 'date' => ['nullable'],

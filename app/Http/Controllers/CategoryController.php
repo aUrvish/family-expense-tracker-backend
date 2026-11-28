@@ -9,6 +9,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Throwable;
 
 class CategoryController extends Controller
@@ -19,6 +20,16 @@ class CategoryController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
+            if ($request->filled('type')) {
+                $validator = Validator::make($request->only('type'), [
+                    'type' => ['string', Rule::in(['expense', 'income'])],
+                ]);
+
+                if ($validator->fails()) {
+                    return $this->errorResponse('Validation error.', 422, $validator->errors());
+                }
+            }
+
             $familyId = tenant('id');
 
             $query = Category::query();
@@ -29,6 +40,10 @@ class CategoryController extends Controller
                 });
             } else {
                 $query->whereNull('family_id');
+            }
+
+            if ($request->filled('type')) {
+                $query->ofType((string) $request->input('type'));
             }
 
             $categories = $query->orderBy('name')->get()->map(function (Category $category) {
@@ -59,6 +74,7 @@ class CategoryController extends Controller
             $validator = Validator::make($request->all(), [
                 'id' => 'nullable|integer|exists:categories,id',
                 'name' => 'required|string|max:100',
+                'type' => ['required_without:id', 'nullable', 'string', Rule::in(['expense', 'income'])],
                 'icon' => 'nullable|string|max:50',
                 'color' => 'nullable|string|max:20',
             ]);
@@ -87,8 +103,24 @@ class CategoryController extends Controller
                     return $this->errorResponse('Category not found.', 404);
                 }
 
-                // Check duplicate name within family or system
+                $newType = $validated['type'] ?? $category->type;
+
+                if ($newType !== $category->type) {
+                    $inUse = Transaction::where('category_id', $category->id)->exists()
+                        || Budget::where('category_id', $category->id)->exists();
+
+                    if ($inUse) {
+                        return $this->errorResponse(
+                            'Cannot change category type because it is currently used by existing transactions or budgets.',
+                            422,
+                            ['type' => ['Cannot change category type because it is currently used by existing transactions or budgets.']]
+                        );
+                    }
+                }
+
+                // Check duplicate name within same type for family or system
                 $duplicate = Category::where('id', '!=', $category->id)
+                    ->where('type', $newType)
                     ->where(function ($q) use ($familyId) {
                         $q->whereNull('family_id')->orWhere('family_id', $familyId);
                     })
@@ -113,6 +145,7 @@ class CategoryController extends Controller
                 $category->update([
                     'name' => $name,
                     'slug' => $slug,
+                    'type' => $newType,
                     'icon' => $validated['icon'] ?? $category->icon,
                     'color' => $validated['color'] ?? $category->color,
                 ]);
@@ -124,9 +157,12 @@ class CategoryController extends Controller
             }
 
             // Create new custom category
-            $duplicate = Category::where(function ($q) use ($familyId) {
-                $q->whereNull('family_id')->orWhere('family_id', $familyId);
-            })
+            $type = $validated['type'];
+
+            $duplicate = Category::where('type', $type)
+                ->where(function ($q) use ($familyId) {
+                    $q->whereNull('family_id')->orWhere('family_id', $familyId);
+                })
                 ->whereRaw('LOWER(name) = ?', [strtolower($name)])
                 ->exists();
 
@@ -148,6 +184,7 @@ class CategoryController extends Controller
                 'family_id' => $familyId,
                 'name' => $name,
                 'slug' => $slug,
+                'type' => $type,
                 'icon' => $validated['icon'] ?? 'tag',
                 'color' => $validated['color'] ?? '#6B7280',
             ]);
@@ -254,12 +291,14 @@ class CategoryController extends Controller
                 return $this->errorResponse('Trashed category not found.', 404);
             }
 
-            // Conflict check: prevent restoring if an active category with the same name or slug already exists
+            // Conflict check: prevent restoring if an active category with the same name (in same type) or slug already exists
             $conflict = Category::where('family_id', $familyId)
                 ->where('id', '!=', $category->id)
                 ->where(function ($q) use ($category) {
-                    $q->whereRaw('LOWER(name) = ?', [strtolower($category->name)])
-                        ->orWhere('slug', $category->slug);
+                    $q->where(function ($inner) use ($category) {
+                        $inner->where('type', $category->type)
+                            ->whereRaw('LOWER(name) = ?', [strtolower($category->name)]);
+                    })->orWhere('slug', $category->slug);
                 })
                 ->exists();
 
